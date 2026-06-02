@@ -158,7 +158,7 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "角色攻略图提供方",
         "使用 nte 角色攻略时选择的提供方",
         data=["all"],
-        options=["all", "零号攻略组"],
+        options=["all", "零号攻略组", "轩儿Zero"],
     ),
     "NTEProxyUrl": GsStrConfig(
         "代理地址",
