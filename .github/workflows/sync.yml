@@ -2,17 +2,19 @@ name: Auto Sync Fork
 
 on:
   schedule:
-    - cron: '0 */3 * * *' # 每 3 小时执行一次（北京时间 0点、3点、6点、9点...以此类推）
-  workflow_dispatch:     # 允许你随时进 Actions 页面手动点击运行
+    - cron: '0 */3 * * *' # 每 3 小时执行一次
+  workflow_dispatch:     # 允许你手动点击测试
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync upstream changes
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
-        with:
-          upstream_repository: tyql688/NTEUID
-          upstream_branch: main  # 如果原仓库主分支是 master，请改成 master
-          target_branch: main    # 如果你的主分支是 master，请改成 master
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+
+      - name: Sync Upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 告诉 GitHub 官方工具：强行用原作者的主分支更新我的当前分支
+          gh repo sync sssysy/NTEUID -b main
