@@ -24,6 +24,14 @@ from .character_cache import (
 )
 from .realestate_card import draw_realestate_img
 from .achievement_card import draw_achievement_img
+from ..utils.msgs.buttons import (
+    login_buttons,
+    relogin_buttons,
+    role_home_buttons,
+    char_detail_buttons,
+    send_img_with_buttons,
+    refresh_changed_buttons,
+)
 from ..utils.name_convert import CHARS
 from ..utils.sdk.tajiduo_model import CharacterDetail
 
@@ -60,7 +68,8 @@ async def _load_active_user(bot: Bot, ev: Event) -> tuple[NTEUser, AtTarget] | N
     user = await NTEUser.get_active(target.user_id, ev.bot_id)
     if user is None:
         has_history = await NTEUser.has_logged_in_history(target.user_id, ev.bot_id)
-        await send_nte_notify(bot, ev, RoleMsg.not_logged_in(target.is_other, has_history=has_history))
+        buttons = None if target.is_other else (relogin_buttons() if has_history else login_buttons())
+        await send_nte_notify(bot, ev, RoleMsg.not_logged_in(target.is_other, has_history=has_history), buttons=buttons)
         return None
     return user, target
 
@@ -75,7 +84,8 @@ async def run_role_home(bot: Bot, ev: Event) -> None:
         user, client = session
         home = await client.get_role_home(user.uid)
         characters = await load_character_cache(user.uid)
-        await bot.send(await draw_role_card_img(ev, home, characters, user.role_name))
+        img = await draw_role_card_img(ev, home, characters, user.role_name)
+        await send_img_with_buttons(bot, img, role_home_buttons())
 
 
 async def run_character_detail(bot: Bot, ev: Event, char_name: str) -> None:
@@ -101,7 +111,8 @@ async def run_character_detail(bot: Bot, ev: Event, char_name: str) -> None:
             )
         return await send_nte_notify(bot, ev, CharacterMsg.NOT_FOUND)
 
-    await bot.send(await draw_character_card_img(char, user.role_name, user.uid, await get_event_avatar(ev)))
+    img = await draw_character_card_img(char, user.role_name, user.uid, await get_event_avatar(ev))
+    await send_img_with_buttons(bot, img, char_detail_buttons(std_char_name))
 
 
 async def run_character_level(bot: Bot, ev: Event) -> None:
@@ -130,7 +141,11 @@ async def run_refresh_role_panel(bot: Bot, ev: Event) -> None:
         if ev.group_id and not target.is_other:
             await NTEGroupMember.upsert_member(ev.group_id, ev.bot_id, ev.user_id, user.uid, user.role_name)
         sorted_characters = sort_characters(parsed_characters, changed_ids=changed_ids)
-        await bot.send(await draw_refresh_img(ev, user.role_name, user.uid, home, sorted_characters, len(changed_ids)))
+        img = await draw_refresh_img(ev, user.role_name, user.uid, home, sorted_characters, len(changed_ids))
+        changed_names = [
+            name for ch in sorted_characters if ch.id in changed_ids and (name := CHARS.name_by_id(ch.id)) is not None
+        ]
+        await send_img_with_buttons(bot, img, refresh_changed_buttons(changed_names))
 
 
 async def run_achievement(bot: Bot, ev: Event) -> None:

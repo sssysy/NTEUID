@@ -14,11 +14,11 @@ from gsuid_core.utils.download_resource.download_file import download
 
 from .fonts.nte_fonts import nte_font_28, nte_font_42, nte_font_44
 from ..nte_config.nte_config import NTEConfig
-from ..utils.resource.RESOURCE_PATH import QR_PATH
+from ..utils.resource.RESOURCE_PATH import QR_PATH, STATIC_RESOURCE_PATH
 
 ICON = Path(__file__).parent.parent.parent / "ICON.png"
 TEXT_PATH = Path(__file__).parent / "texture2d"
-CARD_LONG_PATH = TEXT_PATH / "card_long"
+CARD_LONG_PATH = STATIC_RESOURCE_PATH / "common" / "card_long"
 
 
 Color = tuple[int, int, int] | tuple[int, int, int, int]
