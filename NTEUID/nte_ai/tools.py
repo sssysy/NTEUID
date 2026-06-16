@@ -5,7 +5,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.ai_core.register import ai_tools
 
-from ..utils.msgs import LoginMsg, send_nte_notify
+from ..utils.msgs import TITLE, LoginMsg, send_nte_notify
 from ..utils.database import NTEUser, NTECharData, NTEGroupMember
 from ..nte_guide.guide import get_guide
 from ..utils.constants import GAME_ID_YIHUAN
@@ -208,7 +208,7 @@ async def nte_sign(bot: Bot, ev: Event) -> str:
     if err:
         return err
     result = await run_user_sign(ev.user_id, ev.bot_id)
-    await send_nte_notify(bot, ev, result, buttons=sign_buttons())
+    await bot.send_option(f"{TITLE}{result}", sign_buttons())
     return "已执行异环签到并发送结果。"
 
 

@@ -34,8 +34,9 @@ async def run_catalog(bot: Bot, ev: Event, query: str) -> None:
     logger.info(f"[NTE图鉴] 发送 {reg.kind} {name} 图鉴 ({len(existing)} 张)")
     message = [MessageSegment.image(await convert_img(path)) for path in existing]
     if reg.kind == "char":
-        message.append(MessageSegment.buttons(catalog_char_buttons(name)))
-    await bot.send(message)
+        await bot.send_option(message, catalog_char_buttons(name))
+    else:
+        await bot.send(message)
 
 
 async def run_catalog_list(bot: Bot, ev: Event, kind: str) -> None:

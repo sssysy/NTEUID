@@ -1,8 +1,6 @@
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
-from gsuid_core.segment import MessageSegment
 
-from .buttons import ButtonRows
 from ..constants import TAPTAP_BIND_GUIDE_URL
 from ...nte_config.prefix import nte_prefix
 from ...nte_config.nte_config import NTEConfig
@@ -251,13 +249,6 @@ async def send_nte_notify(
     ev: Event,
     msg: str,
     need_at: bool = True,
-    buttons: ButtonRows | None = None,
 ) -> None:
     at_sender = need_at and bool(ev.group_id)
-    if buttons is None:
-        await bot.send(f"{TITLE}{msg}", at_sender=at_sender)
-        return
-    await bot.send(
-        [MessageSegment.text(f"{TITLE}{msg}"), MessageSegment.buttons(buttons)],
-        at_sender=at_sender,
-    )
+    await bot.send(f"{TITLE}{msg}", at_sender=at_sender)

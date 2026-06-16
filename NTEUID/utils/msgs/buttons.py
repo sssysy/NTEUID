@@ -1,7 +1,5 @@
 from typing import Literal
 
-from gsuid_core.bot import Bot
-from gsuid_core.segment import MessageSegment
 from gsuid_core.message_models import Button
 
 from ...nte_config.prefix import nte_prefix
@@ -87,11 +85,3 @@ def refresh_changed_buttons(char_names: list[str]) -> ButtonRows:
     for i in range(0, min(len(char_names), 4), 2):
         rows.append([cmd_btn(name, f"{name}面板") for name in char_names[i : i + 2]])
     return rows
-
-
-async def send_img_with_buttons(bot: Bot, img: str | bytes, buttons: ButtonRows) -> None:
-    """图片卡片附按钮；buttons 为空则只发图。平台降级由核心 target_send 处理。"""
-    if not buttons:
-        await bot.send(MessageSegment.image(img))
-        return
-    await bot.send([MessageSegment.image(img), MessageSegment.buttons(buttons)])
