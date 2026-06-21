@@ -406,9 +406,10 @@ def _draw_damage(
             fill=COLOR_WHITE,
             anchor="lm",
         )
+        rotation_note = "  Σ多形态" if ability.combo_form_count > 1 else ""
         draw.text(
             (x1 - 20, y + 24),
-            f"Lv{ability.level}  循环期望 {ability.rotation_expected:,.0f}",
+            f"Lv{ability.level}  循环期望 {ability.rotation_expected:,.0f}{rotation_note}",
             font=nte_font_origin(22),
             fill=COLOR_WHITE,
             anchor="rm",
