@@ -469,7 +469,9 @@ async def draw_character_card_with_original(
     canvas = get_nte_bg(WIDTH, height, bg="bg3")
     original_img_path = await _draw_character_art(canvas, character.id)
 
-    title = make_nte_role_title(avatar, role_name, uid).resize((1060, 208), Image.Resampling.LANCZOS)
+    title = make_nte_role_title(avatar, role_name, uid, char_id=character.id).resize(
+        (1060, 208), Image.Resampling.LANCZOS
+    )
     canvas.alpha_composite(title, (20, 26))
     draw = ImageDraw.Draw(canvas)
 

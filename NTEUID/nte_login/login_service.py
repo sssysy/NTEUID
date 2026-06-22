@@ -335,7 +335,7 @@ async def _send_login_link(bot: Bot, ev: Event, url: str) -> None:
     if forward and not private_onebot:
         await bot.send(MessageSegment.node(lines))
     else:
-        await bot.send_option("\n".join(lines), login_link_buttons(url))
+        await bot.send_option("\n".join(lines), login_link_buttons(url), at_sender=at_sender)
 
 
 async def request_login(bot: Bot, ev: Event) -> None:

@@ -208,7 +208,7 @@ async def nte_sign(bot: Bot, ev: Event) -> str:
     if err:
         return err
     result = await run_user_sign(ev.user_id, ev.bot_id)
-    await bot.send_option(f"{TITLE}{result}", sign_buttons())
+    await bot.send_option(f"{TITLE}{result}", sign_buttons(), at_sender=bool(ev.group_id))
     return "已执行异环签到并发送结果。"
 
 

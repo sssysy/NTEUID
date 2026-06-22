@@ -73,7 +73,7 @@ async def _load_active_user(bot: Bot, ev: Event) -> tuple[NTEUser, AtTarget] | N
         if buttons is None:
             await send_nte_notify(bot, ev, msg)
         else:
-            await bot.send_option(f"{TITLE}{msg}", buttons)
+            await bot.send_option(f"{TITLE}{msg}", buttons, at_sender=bool(ev.group_id))
         return None
     return user, target
 

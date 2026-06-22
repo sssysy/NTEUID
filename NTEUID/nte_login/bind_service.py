@@ -36,7 +36,7 @@ async def view_bindings(bot: Bot, ev: Event) -> None:
     if len(accounts) < 2:
         await send_nte_notify(bot, ev, msg)
     else:
-        await bot.send_option(f"{TITLE}{msg}", switch_buttons())
+        await bot.send_option(f"{TITLE}{msg}", switch_buttons(), at_sender=bool(ev.group_id))
 
 
 async def switch_binding(bot: Bot, ev: Event, target: str) -> None:
@@ -59,7 +59,7 @@ async def switch_binding(bot: Bot, ev: Event, target: str) -> None:
         )
     await NTEUser.touch_account(ev.user_id, ev.bot_id, account.center_uid)
     msg = BindMsg.switch_done(account.center_uid, account.role_name, account.uid)
-    await bot.send_option(f"{TITLE}{msg}", switched_buttons())
+    await bot.send_option(f"{TITLE}{msg}", switched_buttons(), at_sender=bool(ev.group_id))
 
 
 async def get_laohu_tokens(bot: Bot, ev: Event) -> None:

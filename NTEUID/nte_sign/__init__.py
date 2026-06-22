@@ -54,7 +54,7 @@ _sign_hour, _sign_minute = _parse_sign_time()
 @sv_nte_sign.on_fullmatch(("签到", "日签"))
 async def nte_manual_sign(bot: Bot, ev: Event):
     msg = await run_user_sign(ev.user_id, ev.bot_id)
-    await bot.send_option(f"{TITLE}{msg}", sign_buttons())
+    await bot.send_option(f"{TITLE}{msg}", sign_buttons(), at_sender=bool(ev.group_id))
 
 
 @sv_nte_sign_all.on_fullmatch("全部签到")
