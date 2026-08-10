@@ -148,7 +148,7 @@ async def _push_one(sub: Subscribe, max_pushes: int, today: str) -> None:
         if role_state.pushed_today(today) >= max_pushes:
             continue
         game_id, uid = key.split(":", 1)
-        user = await NTEUser.get_by_role(sub.user_id, uid, game_id)
+        user = await NTEUser.get_by_role(sub.user_id, sub.bot_id, uid, game_id)
         if user is None or not user.access_token:
             continue
 

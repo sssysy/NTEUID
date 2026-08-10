@@ -10,7 +10,12 @@ from .base import SdkError
 
 
 class TajiduoError(SdkError):
-    pass
+    @property
+    def server_message(self) -> str | None:
+        if self.raw is None:
+            return None
+        message = self.raw.get("msg")
+        return message if isinstance(message, str) and message else None
 
 
 class CharQuality(str, Enum):
@@ -411,6 +416,25 @@ class GameSignReward(_TajiduoModel):
     icon: str
     name: str
     num: int
+
+
+class GameSignResignInfo(_TajiduoModel):
+    """游戏补签信息（`GET /apihub/awapi/resign_info` 接口返回）。
+
+    字段语义与官方 H5（webstatic.tajiduo.com/bbs/yh-signin）一致：
+    - `coin` 当前补签币（呗果积点）余额
+    - `cost` 单次补签消耗（200）
+    - `resign_cnt` 本月已补签次数（resignCnt）
+    - `resign_limit` 本月补签上限（resignLimit = 3）
+    - `today_sign` 今日是否已签
+    """
+
+    game_id: str = Field("", alias="gameId", description="游戏ID")
+    coin: int = Field(0, description="补签币余额（呗果积点）")
+    cost: int = Field(200, description="单次补签消耗（呗果积点）")
+    re_sign_cnt: int = Field(0, alias="resignCnt", description="本月已补签次数")
+    re_sign_limit: int = Field(3, alias="resignLimit", description="本月补签上限")
+    today_sign: bool = Field(False, alias="todaySign", description="今日是否已签")
 
 
 class PostShareData(_TajiduoModel):

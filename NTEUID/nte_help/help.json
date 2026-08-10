@@ -383,6 +383,22 @@
                 "need_ck": true,
                 "need_sk": false,
                 "need_admin": false
+            },
+            {
+                "name": "补签",
+                "desc": "补签异环：需今日已签到且有漏签；每次消耗 200 呗果，每账号每月最多 3 次，可带角色ID",
+                "eg": "补签",
+                "need_ck": true,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "幻塔补签",
+                "desc": "补签幻塔：需今日已签到且有漏签；每次消耗 200 呗果，每账号每月最多 3 次，可带角色ID",
+                "eg": "幻塔补签",
+                "need_ck": true,
+                "need_sk": false,
+                "need_admin": false
             }
         ]
     },

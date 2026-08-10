@@ -122,6 +122,7 @@ async def open_session(
     login_expired_msg: str,
     game_id: str = PRIMARY_GAME_ID,
     target_user_id: str | None = None,
+    selected_user: NTEUser | None = None,
 ) -> tuple[NTEUser, TajiduoClient] | None:
     """选活跃账号 + refresh client。返回 `(user, client)` 或 `None`（消息已发，调用方直接 `return`）。
     refresh 抛 `TajiduoError` 一律按 LOGIN_EXPIRED 处理（mark_invalid + 重登提示）。
@@ -129,7 +130,9 @@ async def open_session(
     `target_user_id` 用于 @ 查询场景：传入即按该 QQ 查活跃账号；不传走 `ev.user_id`（默认查发送者本人）。
     """
     target = target_user_id or ev.user_id
-    user = await _pick_user(target, ev.bot_id, game_id)
+    user = selected_user
+    if user is None:
+        user = await _pick_user(target, ev.bot_id, game_id)
     if user is None:
         # 区分"完全没登过"vs"登过但被 mark_invalid"——后者应建议先刷新令牌而不是重新登录。
         has_history = await NTEUser.has_logged_in_history(target, ev.bot_id)
@@ -183,6 +186,7 @@ class SessionCall:
         load_failed_msg: str,
         game_id: str = PRIMARY_GAME_ID,
         target_user_id: str | None = None,
+        selected_user: NTEUser | None = None,
     ) -> None:
         self._bot = bot
         self._ev = ev
@@ -192,6 +196,7 @@ class SessionCall:
         self._load_failed_msg = load_failed_msg
         self._game_id = game_id
         self._target_user_id = target_user_id
+        self._selected_user = selected_user
         self._user: NTEUser | None = None
 
     async def __aenter__(self) -> tuple[NTEUser, TajiduoClient] | None:
@@ -203,6 +208,7 @@ class SessionCall:
             login_expired_msg=self._login_expired_msg,
             game_id=self._game_id,
             target_user_id=self._target_user_id,
+            selected_user=self._selected_user,
         )
         if session is None:
             return None

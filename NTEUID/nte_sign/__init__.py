@@ -14,6 +14,7 @@ from .sign_runner import (
     run_scheduled_sign,
 )
 from .sign_calendar import run_sign_calendar
+from .resign_service import run_user_resign
 from ..utils.database import NTEUser, NTESignRecord
 from ..utils.constants import GAME_ID_HUANTA, GAME_ID_YIHUAN
 from ..utils.subscribe import (
@@ -31,6 +32,7 @@ sv_nte_sign = SV("nte签到")
 sv_nte_sign_all = SV("nte全部签到", pm=1)
 sv_nte_auto = SV("nte自动签到")
 sv_nte_sign_calendar = SV("nte签到日历")
+sv_nte_resign = SV("nte补签")
 
 
 def _parse_sign_time() -> tuple[int, int]:
@@ -126,6 +128,16 @@ async def nte_sign_calendar_yihuan(bot: Bot, ev: Event):
 @sv_nte_sign_calendar.on_fullmatch(("幻塔签到日历", "幻塔每日签到", "幻塔签到一览", "幻塔签到记录", "幻塔签到历史"))
 async def nte_sign_calendar_huanta(bot: Bot, ev: Event):
     await run_sign_calendar(bot, ev, GAME_ID_HUANTA)
+
+
+@sv_nte_resign.on_command("补签", block=True)
+async def nte_yihuan_resign(bot: Bot, ev: Event):
+    await run_user_resign(bot, ev, GAME_ID_YIHUAN, ev.text.strip())
+
+
+@sv_nte_resign.on_command("幻塔补签", block=True)
+async def nte_huanta_resign(bot: Bot, ev: Event):
+    await run_user_resign(bot, ev, GAME_ID_HUANTA, ev.text.strip())
 
 
 @scheduler.scheduled_job("cron", hour=_sign_hour, minute=_sign_minute)

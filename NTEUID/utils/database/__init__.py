@@ -103,6 +103,7 @@ class NTEUser(User, table=True):
         cls: type[T_NTEUser],
         session: AsyncSession,
         user_id: str,
+        bot_id: str,
         uid: str,
         game_id: str,
     ) -> T_NTEUser | None:
@@ -110,9 +111,10 @@ class NTEUser(User, table=True):
             select(cls)
             .where(
                 cls.user_id == user_id,
+                cls.bot_id == bot_id,
                 col(cls.uid) == uid,
                 col(cls.game_id) == game_id,
-                col(cls.access_token) != "",
+                (col(cls.cookie) != "") | (col(cls.access_token) != ""),
                 (col(cls.status).is_(None)) | (col(cls.status) == ""),
             )
             .order_by(col(cls.updated_at).desc())

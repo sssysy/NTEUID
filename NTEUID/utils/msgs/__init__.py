@@ -78,8 +78,47 @@ class SignMsg:
     CALENDAR_EMPTY = "暂无签到奖励数据"
 
     @classmethod
-    def login_expired(cls) -> str:
+    def not_logged_in(cls, is_other: bool = False, *, has_history: bool = False) -> str:
+        if is_other:
+            return "对方登录已失效，无法查询" if has_history else "对方尚未登录塔吉多账号"
+        return CommonMsg.not_logged_in(has_history=has_history)
+
+    @classmethod
+    def login_expired(cls, is_other: bool = False) -> str:
+        if is_other:
+            return "对方登录已失效，无法查询"
         return CommonMsg.login_expired()
+
+
+class ResignMsg:
+    """游戏签到补签（补签）相关文案。"""
+
+    FAILED = "补签失败，稍后再试"
+
+    @classmethod
+    def role_not_found(cls, role_id: str) -> str:
+        return f"未找到角色 ID：{role_id}"
+
+    @classmethod
+    def not_signed_today(cls) -> str:
+        return f"今日尚未完成游戏签到，请先发送【{nte_prefix()}签到】完成今日签到后再补签"
+
+    @classmethod
+    def no_missed(cls) -> str:
+        return "本月签到无漏签，无需补签"
+
+    @classmethod
+    def busy(cls) -> str:
+        return SignMsg.ACCOUNT_BUSY
+
+    @classmethod
+    def done(
+        cls,
+        role_name: str,
+        uid: str,
+        cost: int,
+    ) -> str:
+        return f"补签成功：{role_name}（{uid}）\n已消耗 {cost} 呗果积点，领取当日签到后下一日奖励"
 
 
 class RoleMsg:

@@ -77,6 +77,7 @@ TEXTURE_PATH = Path(__file__).parent / "texture2d" / "sign"
 CELL_ENABLE = open_texture(TEXTURE_PATH / "cell_enable.png", (CELL_W, CELL_H))
 CELL_DISABLE = open_texture(TEXTURE_PATH / "cell_disable.png", (CELL_W, CELL_H))
 CELL_DONE = open_texture(TEXTURE_PATH / "cell_done.png", (CELL_W, CELL_H))
+TATA_COIN_ICON = open_texture(TEXTURE_PATH / "coin_icon.png", (vw(26), vw(26)))
 
 _SIGN_HEADER_RAW = open_texture(TEXTURE_PATH / "sign_header.png")
 
@@ -165,14 +166,16 @@ def _draw_summary_row(
     xy: tuple[int, int],
     width: int,
     state: GameSignState,
+    resign_remaining: int = 0,
+    missed_days: int = 0,
 ) -> None:
-    """4 列统计：本月 / 累计签到 / 今日 / 可补签。直接画在烘焙暗带上，不重画底。"""
     x, y = xy
     items = [
         (f"{state.month}月", "本月"),
         (f"{state.days}天", "累计签到"),
         ("已签" if state.today_sign else "未签", "今日"),
-        (str(state.re_sign_cnt), "可补签"),
+        (str(resign_remaining), "可补签次数"),
+        (str(missed_days), "漏签"),
     ]
     cell_w = width // len(items)
     cy_value = y + SUMMARY_VALUE_TOP
@@ -201,6 +204,9 @@ async def draw_sign_calendar_img(
     role_name: str,
     uid: str,
     game_id: str,
+    resign_coin: int | None,
+    resign_remaining: int = 0,
+    missed_days: int = 0,
 ):
     rewards = list(rewards)
     rows = (len(rewards) + GRID_COLS - 1) // GRID_COLS
@@ -229,6 +235,14 @@ async def draw_sign_calendar_img(
 
     draw = ImageDraw.Draw(canvas)
     canvas.alpha_composite(SIGN_LOGO, ((WIDTH - SIGN_LOGO.width) // 2, body_top))
+    canvas.alpha_composite(TATA_COIN_ICON, (870, body_top + 74))
+    draw.text((952, body_top + 62), "塔塔币", font=summary_label_font, fill=COLOR_SUMMARY_LABEL)
+    draw.text(
+        (952, body_top + 96),
+        str(resign_coin) if resign_coin is not None else "--",
+        font=summary_value_font,
+        fill=COLOR_WHITE,
+    )
 
     panel_layer = Image.new("RGBA", (PANEL_W, panel_h), (0, 0, 0, 0))
     panel_layer.alpha_composite(baked_dark, (0, 0))
@@ -238,7 +252,14 @@ async def draw_sign_calendar_img(
 
     inner_x = PANEL_X + PANEL_PAD_X
     summary_y = panel_top + (baked_h - SUMMARY_HEIGHT) // 2
-    _draw_summary_row(draw, (inner_x, summary_y), PANEL_W - PANEL_PAD_X * 2, state)
+    _draw_summary_row(
+        draw,
+        (inner_x, summary_y),
+        PANEL_W - PANEL_PAD_X * 2,
+        state,
+        resign_remaining=resign_remaining,
+        missed_days=missed_days,
+    )
 
     grid_y = panel_top + dark_total_h + GRID_TOP_GAP
     icons = [await _load_reward_icon(reward.icon) for reward in rewards]
