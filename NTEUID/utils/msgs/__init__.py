@@ -259,6 +259,10 @@ class CatalogMsg:
     LIST_EMPTY = "暂无名册资源，请先发送【下载全部资源】"
 
 
+class CalendarMsg:
+    LOAD_FAILED = "版本日历资源暂不可用，请联系 Bot 管理员更新资源"
+
+
 class AliasMsg:
     EMPTY_NAME_OR_ALIAS = "名称或别名不能为空"
     INVALID_ACTION = "无效的操作，请检查操作"

@@ -461,8 +461,16 @@
         ]
     },
     "其他": {
-        "desc": "兑换码与帮助",
+        "desc": "版本日历、兑换码与帮助",
         "data": [
+            {
+                "name": "日历",
+                "desc": "直接查看当前版本活动日历图",
+                "eg": "日历",
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
             {
                 "name": "兑换码",
                 "desc": "查看当前可用的官方兑换码列表",
