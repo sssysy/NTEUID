@@ -8,7 +8,7 @@ from gsuid_core.logger import logger
 from gsuid_core.ai_core.models import KnowledgePoint
 from gsuid_core.ai_core.register import ai_alias, ai_entity
 
-from ..nte_role.score import load_attributes, load_score_plan
+from ..scoring.registry import describe_char
 from ..utils.damage.raw import RawEffect, RawCharData
 from ..utils.name_convert import CHARS
 from ..utils.resource.RESOURCE_PATH import CHAR_META_PATH, STATIC_RESOURCE_PATH
@@ -50,26 +50,6 @@ def _effect_lines(title: str, effects: list[RawEffect]) -> list[str]:
     return lines
 
 
-def _attr_names(attr_ids: frozenset[str]) -> str:
-    attrs = load_attributes().entries
-    names = (attrs[attr_id].name for attr_id in sorted(attr_ids) if attr_id in attrs and attrs[attr_id].name)
-    return "、".join(dict.fromkeys(names))
-
-
-def _score_line(char_id: str) -> str:
-    plan = load_score_plan(char_id)
-    if plan is None:
-        return ""
-    core = _attr_names(plan.core_main_attrs)
-    recommend = _attr_names(plan.recommend_attrs)
-    lines = [f"评分参考分：{plan.refer_score}"]
-    if core:
-        lines.append(f"核心主词条：{core}")
-    if recommend:
-        lines.append(f"推荐有效词条：{recommend}")
-    return "\n".join(lines)
-
-
 def _char_content(char_id: str, meta: _CharMeta) -> str | None:
     path = STATIC_RESOURCE_PATH / "data" / "char" / f"{char_id}.json"
     if not path.exists():
@@ -85,7 +65,7 @@ def _char_content(char_id: str, meta: _CharMeta) -> str | None:
     for title, content in (
         ("觉醒", _effect_lines("觉醒", char.awaken)),
         ("混频共鸣", _effect_lines("共鸣", char.resonance)),
-        ("养成评分", [_score_line(char_id)]),
+        ("养成评分", [describe_char(char_id)]),
     ):
         if content and content[0]:
             lines.extend([f"{title}：", *content])

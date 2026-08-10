@@ -7,31 +7,48 @@ from pydantic import ValidationError
 
 from gsuid_core.logger import logger
 
-from .score import score_character
 from ..utils.database import NTECharData
+from ..scoring.registry import get_scorer
 from ..utils.sdk.tajiduo_model import CharacterDetail
 
 
 async def save_character_cache(role_id: str, raw_characters: list[dict[str, Any]]) -> None:
     """整账号覆盖个人数据表：每个角色一行存完整 detail + 评分（不可评分 grade 留空）。
     刷新面板和登录预拉都走这里，保证评分随快照一起落库；身份(user_id/role_name)归 NTEUser。
+    行内 `scorer` 标记产出该分数的评分 provider，排行只在同 provider 的行之间比较。
     """
-    rows: list[dict[str, Any]] = []
+    scorer = await get_scorer()
+    entries: list[tuple[str, dict[str, Any], CharacterDetail | None]] = []
     for raw in raw_characters:
         char_id = str(raw.get("id", ""))
         if not char_id:
             continue
-        score = 0
-        grade = ""
         try:
-            result = score_character(CharacterDetail.model_validate(raw))
-        except (ValidationError, ValueError) as error:
-            # 单个角色解析 / 评分配置异常只让它算「不可评分」(grade 留空)，不连累整账号落库
-            logger.debug(f"[NTE角色] 角色评分失败 uid={role_id} char={char_id}: {error!r}")
-            result = None
-        if result is not None:
-            score, grade = result.score, result.grade
-        rows.append({"char_id": char_id, "detail": json.dumps(raw, ensure_ascii=False), "score": score, "grade": grade})
+            detail = CharacterDetail.model_validate(raw)
+        except ValidationError as error:
+            # 单个角色解析异常只让它算「不可评分」(grade 留空)，不连累整账号落库
+            logger.debug(f"[NTE角色] 角色快照解析失败 uid={role_id} char={char_id}: {error!r}")
+            detail = None
+        entries.append((char_id, raw, detail))
+
+    valid = [detail for _, _, detail in entries if detail is not None]
+    batch = await scorer.score_batch(valid)
+    if len(batch) != len(valid):
+        raise ValueError(f"评分包违反契约: scorer={scorer.scorer_id} score_batch 返回 {len(batch)}/{len(valid)}")
+    results = iter(batch)
+    rows: list[dict[str, Any]] = []
+    for char_id, raw, detail in entries:
+        result = next(results) if detail is not None else None
+        score, grade = (result.score, result.grade) if result is not None else (0, "")
+        rows.append(
+            {
+                "char_id": char_id,
+                "detail": json.dumps(raw, ensure_ascii=False),
+                "score": score,
+                "grade": grade,
+                "scorer": scorer.scorer_id,
+            }
+        )
     await NTECharData.replace_for_uid(role_id, rows)
 
 

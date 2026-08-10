@@ -7,7 +7,6 @@ from PIL import Image, ImageOps, ImageDraw
 from gsuid_core.logger import logger
 from gsuid_core.utils.image.convert import convert_img
 
-from .score import CharacterScore, EquipmentScore, score_character
 from .heartlike import heart_level
 from .panel_image import get_character_panel_img
 from ..utils.image import (
@@ -19,6 +18,8 @@ from ..utils.image import (
     open_texture,
     make_nte_role_title,
 )
+from ..scoring.contract import Scorer, ScoreResult, EquipmentView
+from ..scoring.registry import get_scorer, grade_badge
 from ..utils.damage.buffs import enemy_mods, scan_character_buffs
 from ..utils.resource.cdn import (
     get_weapon_img,
@@ -117,15 +118,11 @@ def _custom_panel_art(image: Image.Image) -> Image.Image:
     return Image.composite(panel_img, Image.new("RGBA", panel_size), panel_mask)
 
 
-def _grade_img(grade: str | None, size: int) -> Image.Image | None:
-    return open_texture(TEX / f"rank_{grade}.png", (size, size)) if grade in {"S", "A", "B"} else None
-
-
 async def _draw_attrs(
     canvas: Image.Image,
     draw: ImageDraw.ImageDraw,
     props: list[CharacterProperty],
-    score: CharacterScore | None,
+    score: ScoreResult | None,
 ) -> None:
     for index, prop in enumerate(_visible_props(props, 9)):
         x, y = 620, BODY_TOP + 160 + index * 64
@@ -188,15 +185,16 @@ def _draw_score(
     canvas: Image.Image,
     draw: ImageDraw.ImageDraw,
     xy: tuple[int, int],
-    score: CharacterScore | None,
+    scorer: Scorer,
+    score: ScoreResult | None,
 ) -> None:
     x, y = xy
     canvas.alpha_composite(open_texture(TEX / "score_bg.png"), (x, y))
     canvas.alpha_composite(open_texture(TEX / "score_fg.png"), (x, y))
-    rank = _grade_img(score.grade if score is not None else None, 92)
+    rank = grade_badge(scorer, score.grade if score is not None else None, 92)
     if rank is not None:
         canvas.alpha_composite(rank, (x + 133, y + 58))
-    score_text = "--分" if score is None else f"{score.score}分"
+    score_text = "--分" if score is None else score.display
     draw.text((x + 180, y + 218), score_text, font=nte_font_origin(42), fill=COLOR_WHITE, anchor="mm")
 
 
@@ -279,19 +277,20 @@ async def _draw_drive(
     draw: ImageDraw.ImageDraw,
     xy: tuple[int, int],
     item: CharacterSuitItem,
-    score: CharacterScore | None,
-    item_score: EquipmentScore | None,
+    scorer: Scorer,
+    score: ScoreResult | None,
+    item_score: EquipmentView | None,
 ) -> None:
     x, y = xy
     canvas.alpha_composite(open_texture(TEX / "ad_bg.png"), (x, y))
     drive = await get_char_suit_drive_img(item.id) if item.id else None
     if drive is not None:
         canvas.alpha_composite(drive.convert("RGBA").resize((128, 128)), (x, y - 2))
-    rank = _grade_img(item_score.grade if item_score is not None else None, 48)
+    rank = grade_badge(scorer, item_score.grade if item_score is not None else None, 48)
     if rank is not None:
         canvas.alpha_composite(rank, (x + 110, y + 62))
     if item_score is not None:
-        score_text = f"{item_score.score:.1f}分"
+        score_text = item_score.display
         score_w = max(104, round(draw.textlength(score_text, font=nte_font_origin(24))) + 34)
         SmoothDrawer().rounded_rectangle(
             (x + 158, y + 70, x + 158 + score_w, y + 108),
@@ -448,10 +447,15 @@ async def draw_character_card_with_original(
     character: CharacterDetail, role_name: str, uid: str, avatar: Image.Image
 ) -> tuple[bytes, Path | None]:
     suit_items = [*character.suit.core, *character.suit.pie] if character.suit.id else []
-    score = score_character(character)
-    equipment_scores: tuple[EquipmentScore | None, ...] = (None,) * len(suit_items)
+    scorer = await get_scorer()
+    score = await scorer.score_character(character)
+    equipment_scores: tuple[EquipmentView | None, ...] = (None,) * len(suit_items)
     if score is not None:
-        equipment_scores = score.equipment
+        if len(score.equipment) != len(suit_items):
+            raise ValueError(
+                f"评分包违反契约: scorer={scorer.scorer_id} equipment={len(score.equipment)} 装备数={len(suit_items)}"
+            )
+        equipment_scores = tuple(score.equipment)
     drive_rows = (len(suit_items) + 2) // 3
     drive_h = 0 if not suit_items else drive_rows * 554 + (drive_rows - 1) * GAP
     gear_h = 272 if suit_items or character.fork.id else 0
@@ -504,7 +508,15 @@ async def draw_character_card_with_original(
     cursor = BODY_TOP + 880 + GAP
     if gear_h:
         if suit_items:
-            _draw_score(canvas, draw, (18, cursor), score)
+            # 评分计算来源行：大评分块上方的既有间隙内，贴块左缘
+            draw.text(
+                (28, cursor - 14),
+                f"评分计算来源：「{scorer.meta.author}」",
+                font=nte_font_origin(20),
+                fill=(210, 208, 228),
+                anchor="lm",
+            )
+            _draw_score(canvas, draw, (18, cursor), scorer, score)
         if character.fork.id:
             await _draw_weapon(canvas, draw, (406 if suit_items else 18, cursor), character.fork)
         cursor += gear_h + GAP
@@ -514,6 +526,7 @@ async def draw_character_card_with_original(
             draw,
             (4 + index % 3 * 366, cursor + index // 3 * (554 + GAP)),
             item,
+            scorer,
             score,
             equipment_scores[index],
         )

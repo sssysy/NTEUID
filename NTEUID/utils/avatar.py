@@ -39,5 +39,8 @@ async def fetch_avatar(ev: Event, user_id: str, char_id: str | None = None) -> I
     except (httpx.HTTPError, OSError) as exc:
         logger.warning(f"[NTE头像] 获取失败 user_id={user_id}: {exc}")
         return await _fallback_avatar(char_id)
+    if img is None:
+        # get_qq_avatar 下载失败时自吞异常返回 None(warning 已在核心打过)
+        return await _fallback_avatar(char_id)
     _AVATAR_CACHE.set(user_id, img)
     return img

@@ -9,10 +9,11 @@ from PIL import Image, ImageDraw
 from gsuid_core.utils.image.convert import convert_img
 
 from ..utils.image import COLOR_WHITE, SmoothDrawer, add_footer, get_nte_bg, open_texture, char_img_ring
+from ..scoring.contract import Scorer
+from ..scoring.registry import grade_badge, grade_color
 from ..utils.resource.cdn import get_avatar_img, get_char_suit_detail_img
 from ..utils.fonts.nte_fonts import nte_font_origin
 
-CHAR_TEX = Path(__file__).parent / "texture2d" / "character"
 RANK_TEX = Path(__file__).parent / "texture2d" / "rank"
 
 WIDTH = 1280
@@ -27,7 +28,6 @@ AVATAR = 124
 INDIGO_TOP = (54, 50, 86)
 INDIGO_BOTTOM = (28, 26, 48)
 SUBTEXT = (192, 190, 224)
-GRADE_COLOR = {"S": (255, 208, 96), "A": (170, 165, 240), "B": (176, 182, 214)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +74,7 @@ def _vgradient(h: int, alpha: int) -> Image.Image:
     return strip.resize((WIDTH, h), Image.Resampling.BILINEAR)
 
 
-async def _draw_row(canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int, entry: BoardEntry) -> None:
+async def _draw_row(canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int, entry: BoardEntry, scorer: Scorer) -> None:
     canvas.alpha_composite(_row_frame(), (PANEL_X0, y))
     mid = y + ROW_H // 2
     # 角色头像 + 觉醒角标（不放名次序号：已按分降序，名次靠分数体现）
@@ -116,13 +116,14 @@ async def _draw_row(canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int, entr
         anchor="lm",
     )
     # 评级图标 + 分数
-    if entry.grade in GRADE_COLOR:
-        canvas.alpha_composite(open_texture(CHAR_TEX / f"rank_{entry.grade}.png", (76, 76)), (1014, mid - 38))
+    badge = grade_badge(scorer, entry.grade, 76)
+    if badge is not None:
+        canvas.alpha_composite(badge, (1014, mid - 38))
     draw.text(
         (1196, mid - 16),
         str(entry.score),
         font=nte_font_origin(52),
-        fill=GRADE_COLOR.get(entry.grade, COLOR_WHITE),
+        fill=grade_color(scorer, entry.grade),
         anchor="rm",
     )
     draw.text((1196, mid + 33), "分", font=nte_font_origin(22), fill=SUBTEXT, anchor="rm")
@@ -141,7 +142,7 @@ def _draw_header(canvas: Image.Image, draw: ImageDraw.ImageDraw, scope_label: st
     SmoothDrawer().rounded_rectangle((54, 246, 360, 253), 3, fill=(251, 221, 188, 240), target=canvas)
 
 
-async def draw_strongest_board_img(entries: list[BoardEntry], scope_label: str) -> bytes:
+async def draw_strongest_board_img(entries: list[BoardEntry], scope_label: str, scorer: Scorer) -> bytes:
     height = HEADER_H + len(entries) * ROW_H + max(0, len(entries) - 1) * ROW_GAP + 110
     canvas = get_nte_bg(WIDTH, height, bg="bg4").convert("RGBA")
     canvas.alpha_composite(_vgradient(height, 70))
@@ -150,7 +151,7 @@ async def draw_strongest_board_img(entries: list[BoardEntry], scope_label: str) 
 
     y = HEADER_H
     for entry in entries:
-        await _draw_row(canvas, draw, y, entry)
+        await _draw_row(canvas, draw, y, entry, scorer)
         y += ROW_H + ROW_GAP
 
     add_footer(canvas)

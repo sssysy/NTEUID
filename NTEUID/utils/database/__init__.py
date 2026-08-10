@@ -21,14 +21,18 @@ exec_list.extend(
         "ALTER TABLE NTEUser ADD COLUMN xhh_pkey TEXT DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS ix_nteuser_uid ON NTEUser (uid)",
         "CREATE INDEX IF NOT EXISTS ix_nteuser_user_id ON NTEUser (user_id)",
-        # 评分榜走 char_id + score 排序，只回展示行；uid/grade 放进索引减少回表。
-        "CREATE INDEX IF NOT EXISTS ix_ntechardata_char_id_score_uid ON ntechardata (char_id, score DESC, uid, grade)",
         # 排行展示按 (char_id, uid) 批量取 detail。
         "CREATE INDEX IF NOT EXISTS ix_ntechardata_char_id_uid ON ntechardata (char_id, uid)",
         # 群榜取本群参榜账号时同时过滤 bot_id，并按更新时间展示。
         "CREATE INDEX IF NOT EXISTS ix_ntegroupmember_group_bot_updated ON ntegroupmember (group_id, bot_id, updated_at DESC)",
         # 刷新面板登记群参榜账号时按 group_id + bot_id + uid 查旧行。
         "CREATE INDEX IF NOT EXISTS ix_ntegroupmember_group_bot_uid ON ntegroupmember (group_id, bot_id, uid)",
+        # 评分快照标记产出分数的评分 provider；存量可评分行都是内置 roll_value 算的。
+        "ALTER TABLE ntechardata ADD COLUMN scorer TEXT DEFAULT ''",
+        "UPDATE ntechardata SET scorer = 'roll_value' WHERE scorer = '' AND grade != ''",
+        # 排行按 (char_id, scorer) 过滤后走 score 排序；取代旧的纯 (char_id, score) 索引。
+        "CREATE INDEX IF NOT EXISTS ix_ntechardata_char_scorer_score ON ntechardata (char_id, scorer, score DESC, uid, grade)",
+        "DROP INDEX IF EXISTS ix_ntechardata_char_id_score_uid",
     ]
 )
 
@@ -758,7 +762,8 @@ class NTEGroupMember(BaseIDModel, table=True):
 class NTECharData(BaseIDModel, table=True):
     """个人数据表，一行 = (uid, char_id)，取代旧的 playerinfo/{uid}.json 文件。
     只放与角色绑定的数据：`detail`（该角色完整 JSON，觉醒 / 套装 等出榜字段都在里面）、
-    `score`（int 排序键走索引）和 `grade`（detail 里没有、我们算的；空 = 不可评分）。
+    `score`（int 排序键走索引）、`grade`（detail 里没有、我们算的；空 = 不可评分）和
+    `scorer`（产出该分数的评分 provider id；不同算法的分数不可比，排行只在同 provider 行之间排）。
     身份（user_id / role_name）不在这里，统一从 NTEUser 按 uid 现查——本群排名 / bot排名
     都这样取身份出榜 + 标红。排名只投影 (uid, score, grade) 按 score 倒序；展示的 ≤21 行
     再按 uid 取 detail 解析出觉醒 / 套装。
@@ -770,6 +775,7 @@ class NTECharData(BaseIDModel, table=True):
     detail: str = Field(default="", title="该角色完整JSON")
     score: int = Field(default=0, title="评分")
     grade: str = Field(default="", title="评级(空=不可评分)")
+    scorer: str = Field(default="", title="评分provider")
     updated_at: datetime = Field(
         default_factory=datetime.now,
         sa_column_kwargs={"onupdate": datetime.now},
@@ -784,7 +790,7 @@ class NTECharData(BaseIDModel, table=True):
         uid: str,
         rows: list[dict[str, Any]],
     ) -> None:
-        """刷新面板时整账号覆盖：先删该 uid 旧行，再按角色逐行插入（rows 只含 char_id/detail/score/grade）。"""
+        """刷新面板时整账号覆盖：先删该 uid 旧行，再按角色逐行插入（rows 只含 char_id/detail/score/grade/scorer）。"""
         await session.execute(delete(cls).where(col(cls.uid) == uid))
         for row in rows:
             session.add(cls(uid=uid, **row))
@@ -823,15 +829,16 @@ class NTECharData(BaseIDModel, table=True):
         cls: type[T_NTECharData],
         session: AsyncSession,
         char_id: str,
+        scorer: str,
         uids: list[str] | None = None,
         limit: int | None = None,
     ) -> list[tuple[str, int, str]]:
-        """某角色可评分行按 score 倒序，投影 (uid, score, grade)。
+        """某角色可评分行按 score 倒序，投影 (uid, score, grade)；只比同 `scorer` 产出的分数。
         `uids` 给定 = 本群排名（按这批 uid 过滤）；为 None = bot排名（扫全表）。
         """
         stmt = (
             select(col(cls.uid), col(cls.score), col(cls.grade))
-            .where(col(cls.char_id) == char_id, col(cls.grade) != "")
+            .where(col(cls.char_id) == char_id, col(cls.scorer) == scorer, col(cls.grade) != "")
             .order_by(col(cls.score).desc(), col(cls.uid).asc())
         )
         if uids is not None:
@@ -849,10 +856,15 @@ class NTECharData(BaseIDModel, table=True):
         cls: type[T_NTECharData],
         session: AsyncSession,
         char_id: str,
+        scorer: str,
         uids: list[str] | None = None,
     ) -> int:
         """某角色可评分账号数，给排行标题用，避免把全榜拉回 Python 后再 len。"""
-        stmt = select(func.count()).select_from(cls).where(col(cls.char_id) == char_id, col(cls.grade) != "")
+        stmt = (
+            select(func.count())
+            .select_from(cls)
+            .where(col(cls.char_id) == char_id, col(cls.scorer) == scorer, col(cls.grade) != "")
+        )
         if uids is not None:
             if not uids:
                 return 0
@@ -866,12 +878,13 @@ class NTECharData(BaseIDModel, table=True):
         cls: type[T_NTECharData],
         session: AsyncSession,
         char_id: str,
+        scorer: str,
         uids: list[str] | None = None,
     ) -> tuple[str, int, str] | None:
         """某角色最高分账号；最强面板只需要第一名，不能复用全榜查询。"""
         stmt = (
             select(col(cls.uid), col(cls.score), col(cls.grade))
-            .where(col(cls.char_id) == char_id, col(cls.grade) != "")
+            .where(col(cls.char_id) == char_id, col(cls.scorer) == scorer, col(cls.grade) != "")
             .order_by(col(cls.score).desc(), col(cls.uid).asc())
             .limit(1)
         )
@@ -892,6 +905,7 @@ class NTECharData(BaseIDModel, table=True):
         cls: type[T_NTECharData],
         session: AsyncSession,
         char_id: str,
+        scorer: str,
         uid: str,
         score: int,
         uids: list[str] | None = None,
@@ -902,6 +916,7 @@ class NTECharData(BaseIDModel, table=True):
             .select_from(cls)
             .where(
                 col(cls.char_id) == char_id,
+                col(cls.scorer) == scorer,
                 col(cls.grade) != "",
                 or_(col(cls.score) > score, and_(col(cls.score) == score, col(cls.uid) < uid)),
             )
@@ -918,15 +933,18 @@ class NTECharData(BaseIDModel, table=True):
     async def strongest_per_char(
         cls: type[T_NTECharData],
         session: AsyncSession,
+        scorer: str,
         uids: list[str] | None = None,
     ) -> list[tuple[str, str, int, str]]:
         """每个角色评分最高的一行 (char_id, uid, score, grade)，按 score 降序——最强排行用。
-        `uids` 给定 = 本群(按这批号过滤)；None = bot(全表)。
+        只比同 `scorer` 产出的分数。`uids` 给定 = 本群(按这批号过滤)；None = bot(全表)。
         DB 侧 `GROUP BY char_id` + `MAX(score)` 直接算完，只回每角色一行(~几十行)——
         不把全表(用户数×角色数)行 transfer 到 Python；SQLite bare column uid/grade 跟随 MAX 那行。
         """
         max_score = func.max(col(cls.score)).label("score")
-        stmt = select(col(cls.char_id), col(cls.uid), max_score, col(cls.grade)).where(col(cls.grade) != "")
+        stmt = select(col(cls.char_id), col(cls.uid), max_score, col(cls.grade)).where(
+            col(cls.scorer) == scorer, col(cls.grade) != ""
+        )
         if uids is not None:
             if not uids:
                 return []

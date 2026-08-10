@@ -159,6 +159,11 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "自动签到多账号分批之间的 sleep 窗口 [min, max]",
         [0, 2],
     ),
+    "NTEScoringProvider": GsStrConfig(
+        "评分provider",
+        "角色评分使用的评分算法 ID；内置 roll_value（词条折算），自定义 provider 注册后填其 scorer_id",
+        "roll_value",
+    ),
     "NTEGuide": GsListStrConfig(
         "角色攻略图提供方",
         "使用 nte 角色攻略时选择的提供方",

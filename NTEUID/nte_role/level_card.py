@@ -10,7 +10,6 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.convert import convert_img
 from gsuid_core.utils.image.image_tools import get_event_avatar
 
-from .score import score_character
 from .heartlike import heart_level
 from ..utils.image import (
     COLOR_WHITE,
@@ -20,11 +19,12 @@ from ..utils.image import (
     char_img_ring,
     make_head_avatar,
 )
+from ..scoring.contract import Scorer
+from ..scoring.registry import get_scorer, grade_badge, grade_color
 from ..utils.resource.cdn import get_avatar_img, get_weapon_img, get_char_element_img
 from ..utils.fonts.nte_fonts import nte_font_origin
 from ..utils.sdk.tajiduo_model import CharElement, CharQuality, CharacterDetail
 
-CHAR_TEX = Path(__file__).parent / "texture2d" / "character"
 LEVEL_TEX = Path(__file__).parent / "texture2d" / "level"
 
 WIDTH = 1860
@@ -42,7 +42,6 @@ CYAN = (96, 208, 232)
 SUBTEXT = (198, 184, 224)
 HEART_PINK = (255, 150, 196)
 AWAKEN_GOLD = (255, 208, 96)
-GRADE_COLOR = {"S": (255, 208, 96), "A": (170, 165, 240), "B": (176, 182, 214)}
 RANK_COLOR = {1: (255, 208, 96), 2: (214, 220, 236), 3: (227, 170, 120)}
 # 品级染角色名（CharQuality：S橙 A紫 B蓝 C绿 N白）
 QUALITY_NAME = {
@@ -72,11 +71,13 @@ class LevelEntry:
     grade: str
 
 
-def build_level_entries(characters: list[CharacterDetail]) -> list[LevelEntry]:
+async def build_level_entries(scorer: Scorer, characters: list[CharacterDetail]) -> list[LevelEntry]:
     """每角色解出练度字段，按「装备评分降序 → 不可评分置后 → 品级>等级>觉醒」排序。"""
+    results = await scorer.score_batch(characters)
+    if len(results) != len(characters):
+        raise ValueError(f"评分包违反契约: scorer={scorer.scorer_id} score_batch 返回 {len(results)}/{len(characters)}")
     entries: list[LevelEntry] = []
-    for char in characters:
-        result = score_character(char)
+    for char, result in zip(characters, results):
         score = result.score if result is not None else None
         grade = result.grade if result is not None else ""
         skills = tuple(skill.level for skill in char.skills if skill.type == "Proactive")[:4]
@@ -106,11 +107,6 @@ def build_level_entries(characters: list[CharacterDetail]) -> list[LevelEntry]:
         return (entry.score is None, -rank_score, -entry.quality.rank, -entry.alev, -entry.awaken, entry.char_id)
 
     return sorted(entries, key=key)
-
-
-@lru_cache(maxsize=4)
-def _grade_icon(grade: str) -> Image.Image | None:
-    return open_texture(CHAR_TEX / f"rank_{grade}.png", (54, 54)) if grade in GRADE_COLOR else None
 
 
 def _fit(draw: ImageDraw.ImageDraw, text: str, width: int, font) -> str:
@@ -201,6 +197,7 @@ async def _draw_row(
     y: int,
     rank: int,
     entry: LevelEntry,
+    scorer: Scorer,
     avatar: Image.Image,
     element: Image.Image | None,
     row_img: Image.Image,
@@ -244,7 +241,7 @@ async def _draw_row(
     else:
         draw.text((1270, mid), "—", font=nte_font_origin(32), fill=SUBTEXT, anchor="lm")
 
-    grade_icon = _grade_icon(entry.grade)
+    grade_icon = grade_badge(scorer, entry.grade, 54)
     if grade_icon is not None:
         canvas.alpha_composite(grade_icon, (1584, mid - 27))
     if entry.score is None:
@@ -254,14 +251,15 @@ async def _draw_row(
             (1740, mid - 10),
             str(entry.score),
             font=nte_font_origin(50),
-            fill=GRADE_COLOR.get(entry.grade, COLOR_WHITE),
+            fill=grade_color(scorer, entry.grade),
             anchor="rm",
         )
         draw.text((1740, mid + 32), f"· {entry.suit_pieces}件", font=nte_font_origin(24), fill=SUBTEXT, anchor="rm")
 
 
 async def draw_level_img(ev: Event, role_name: str, uid: str, characters: list[CharacterDetail]) -> bytes:
-    entries = build_level_entries(characters)
+    scorer = await get_scorer()
+    entries = await build_level_entries(scorer, characters)
     avatars = [await get_avatar_img(entry.char_id) for entry in entries]
     # 异环仅 6 种元素，按 element 去重，避免每行重复 open 同一图标
     element_imgs: dict[str, Image.Image | None] = {}
@@ -283,7 +281,7 @@ async def draw_level_img(ev: Event, role_name: str, uid: str, characters: list[C
     for index, (entry, avatar) in enumerate(zip(entries, avatars)):
         element = element_imgs[entry.element.value]
         await _draw_row(
-            canvas, draw, y, index + 1, entry, avatar if avatar is not None else placeholder, element, row_img
+            canvas, draw, y, index + 1, entry, scorer, avatar if avatar is not None else placeholder, element, row_img
         )
         y += ROW_H + ROW_GAP
 

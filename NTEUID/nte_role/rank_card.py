@@ -11,10 +11,11 @@ from gsuid_core.utils.image.convert import convert_img
 
 from ..utils.image import COLOR_WHITE, SmoothDrawer, add_footer, get_nte_bg, open_texture, char_img_ring
 from ..utils.avatar import fetch_avatar
+from ..scoring.contract import Scorer
+from ..scoring.registry import grade_badge, grade_color
 from ..utils.resource.cdn import get_char_detail_img, get_char_suit_detail_img
 from ..utils.fonts.nte_fonts import nte_font_origin
 
-CHAR_TEX = Path(__file__).parent / "texture2d" / "character"
 RANK_TEX = Path(__file__).parent / "texture2d" / "rank"
 
 WIDTH = 1280
@@ -31,7 +32,6 @@ INDIGO_BOTTOM = (28, 26, 48)
 CREAM = (251, 221, 188)
 SUBTEXT = (192, 190, 224)
 SELF_NAME = (255, 96, 96)
-GRADE_COLOR = {"S": (255, 208, 96), "A": (170, 165, 240), "B": (176, 182, 214)}
 TIER_FRAME = {1: "frame_1.png", 2: "frame_2.png", 3: "frame_3.png"}
 
 
@@ -95,6 +95,7 @@ async def _draw_row(
     y: int,
     rank: int,
     entry: RankEntry,
+    scorer: Scorer,
     avatar: Image.Image,
     is_self: bool,
 ) -> None:
@@ -126,14 +127,14 @@ async def _draw_row(
     text = _fit(draw, f"{entry.suit_name} · {entry.suit_pieces}件", 380, nte_font_origin(28))
     draw.text((632, mid), text, font=nte_font_origin(28), fill=COLOR_WHITE, anchor="lm")
     # 评级图标 + 分数（按评级配色）
-    grade = entry.grade
-    if grade in GRADE_COLOR:
-        canvas.alpha_composite(open_texture(CHAR_TEX / f"rank_{grade}.png", (76, 76)), (1014, mid - 38))
+    badge = grade_badge(scorer, entry.grade, 76)
+    if badge is not None:
+        canvas.alpha_composite(badge, (1014, mid - 38))
     draw.text(
         (1196, mid - 16),
         str(entry.score),
         font=nte_font_origin(52),
-        fill=GRADE_COLOR.get(grade, COLOR_WHITE),
+        fill=grade_color(scorer, entry.grade),
         anchor="rm",
     )
     draw.text((1196, mid + 33), "分", font=nte_font_origin(22), fill=SUBTEXT, anchor="rm")
@@ -173,6 +174,7 @@ async def draw_rank_img(
     entries: list[RankEntry],
     total: int,
     scope_label: str,
+    scorer: Scorer,
     self_overflow: tuple[int, RankEntry] | None = None,
 ) -> bytes:
     # 展示行 = 前 N 名 (+ 自己掉榜时榜尾补一行真实名次)
@@ -194,7 +196,7 @@ async def draw_rank_img(
         if self_overflow is not None and index == len(display) - 1:
             draw.text((WIDTH // 2, y + 15), "· · ·", font=nte_font_origin(30), fill=SUBTEXT, anchor="mm")
             y += overflow_gap
-        await _draw_row(canvas, draw, y, rank, entry, avatar, is_self)
+        await _draw_row(canvas, draw, y, rank, entry, scorer, avatar, is_self)
         y += ROW_H + ROW_GAP
 
     add_footer(canvas)

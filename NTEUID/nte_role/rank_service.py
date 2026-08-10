@@ -12,6 +12,7 @@ from .panel_image import cache_original_image
 from ..utils.avatar import fetch_avatar
 from .character_card import draw_character_card_with_original
 from ..utils.database import NTEUser, NTECharData, NTEGroupMember
+from ..scoring.registry import get_scorer
 from ..utils.name_convert import CHARS
 from .strongest_board_card import BoardEntry, draw_strongest_board_img
 from ..utils.sdk.tajiduo_model import CharacterDetail
@@ -38,10 +39,11 @@ async def _send_rank(
     if not std_char_name or not char_id:
         return await send_nte_notify(bot, ev, CharacterMsg.NOT_FOUND)
 
-    total = await NTECharData.count_for_char(char_id, uids)
+    scorer = await get_scorer()
+    total = await NTECharData.count_for_char(char_id, scorer.scorer_id, uids)
     if total == 0:
         return await send_nte_notify(bot, ev, RankMsg.NO_SCORE)
-    show = await NTECharData.rank_for_char(char_id, uids, limit=MAX_ENTRIES)
+    show = await NTECharData.rank_for_char(char_id, scorer.scorer_id, uids, limit=MAX_ENTRIES)
 
     if group_identity is not None:
         self_uids = {uid for uid, (owner, _) in group_identity.items() if owner == ev.user_id}
@@ -51,9 +53,11 @@ async def _send_rank(
     need = [uid for uid, _, _ in show]
     overflow: tuple[int, tuple[str, int, str]] | None = None
     if self_uids and {uid for uid, _, _ in show}.isdisjoint(self_uids):
-        self_row = await NTECharData.best_for_char(char_id, list(self_uids))
+        self_row = await NTECharData.best_for_char(char_id, scorer.scorer_id, list(self_uids))
         if self_row is not None:
-            self_rank = await NTECharData.rank_position_for_char(char_id, self_row[0], self_row[1], uids)
+            self_rank = await NTECharData.rank_position_for_char(
+                char_id, scorer.scorer_id, self_row[0], self_row[1], uids
+            )
             if self_rank > MAX_ENTRIES:
                 overflow = (self_rank, self_row)
     if overflow is not None:
@@ -74,7 +78,7 @@ async def _send_rank(
 
     shown = [build(row) for row in show]
     self_overflow = (overflow[0], build(overflow[1])) if overflow is not None else None
-    await bot.send(await draw_rank_img(ev, std_char_name, char_id, shown, total, scope_label, self_overflow))
+    await bot.send(await draw_rank_img(ev, std_char_name, char_id, shown, total, scope_label, scorer, self_overflow))
 
 
 async def run_character_rank(bot: Bot, ev: Event, char_name: str) -> None:
@@ -123,7 +127,8 @@ async def run_strongest_panel(bot: Bot, ev: Event, char_name: str, *, bot_scope:
     ok, uids = await _scope_member_uids(bot, ev, bot_scope)
     if not ok:
         return
-    top = await NTECharData.best_for_char(char_id, uids)
+    scorer = await get_scorer()
+    top = await NTECharData.best_for_char(char_id, scorer.scorer_id, uids)
     if top is None:
         return await send_nte_notify(bot, ev, RankMsg.NO_SCORE)
 
@@ -141,7 +146,8 @@ async def run_strongest_board(bot: Bot, ev: Event, *, bot_scope: bool) -> None:
     ok, uids = await _scope_member_uids(bot, ev, bot_scope)
     if not ok:
         return
-    rows = await NTECharData.strongest_per_char(uids)
+    scorer = await get_scorer()
+    rows = await NTECharData.strongest_per_char(scorer.scorer_id, uids)
     if not rows:
         return await send_nte_notify(bot, ev, RankMsg.NO_SCORE)
 
@@ -166,4 +172,4 @@ async def run_strongest_board(bot: Bot, ev: Event, *, bot_scope: bool) -> None:
                 grade=grade,
             )
         )
-    await bot.send(await draw_strongest_board_img(entries, "BOT" if bot_scope else "本群"))
+    await bot.send(await draw_strongest_board_img(entries, "BOT" if bot_scope else "本群", scorer))

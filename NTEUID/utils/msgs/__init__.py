@@ -200,6 +200,54 @@ class BindMsg:
         return f"未在已绑定账号中找到目标，可先发送【{nte_prefix()}查看】确认"
 
 
+class ScorerMsg:
+    ADD_USAGE = "用法：scorer增加 <git仓库地址>"
+    REMOVE_USAGE = "用法：scorer删除 <包名>"
+    SET_USAGE = "用法：scorer设置 <scorer_id>"
+    NOT_PACKAGE = "安装失败：仓库根目录没有 __init__.py"
+    NO_PACK = "没有可更新的评分包"
+
+    @classmethod
+    def unknown_id(cls, scorer_id: str, known: list[str]) -> str:
+        return f"评分算法不存在：{scorer_id}，可用：{'、'.join(known)}"
+
+    @classmethod
+    def set_ok(cls, scorer_id: str, name: str) -> str:
+        return f"已切换为 {scorer_id}" + (f"（{name}）" if name else "")
+
+    @classmethod
+    def set_failed(cls, scorer_id: str, error: Exception) -> str:
+        return f"切换失败已回滚：{error!r}"
+
+    @classmethod
+    def already_exists(cls, name: str) -> str:
+        return f"评分包已存在：{name}"
+
+    @classmethod
+    def not_found(cls, name: str) -> str:
+        return f"评分包不存在：{name}"
+
+    @classmethod
+    def installing(cls, name: str) -> str:
+        return f"正在安装 {name}…"
+
+    @classmethod
+    def installed(cls, name: str) -> str:
+        return f"{name} 安装完成，重启 Bot 后生效"
+
+    @classmethod
+    def batch_updated(cls, lines: list[str]) -> str:
+        return "\n".join(lines)
+
+    @classmethod
+    def removed(cls, name: str) -> str:
+        return f"评分包 {name} 已删除"
+
+    @classmethod
+    def git_failed(cls, action: str, output: str) -> str:
+        return f"{action}失败：\n{output[-400:]}"
+
+
 class GuideMsg:
     CHAR_NOT_FOUND = "未找到角色【{char_name}】，请检查名称"
     EMPTY = "角色【{char_name}】暂无攻略图"
