@@ -18,7 +18,7 @@ from ..utils.image import (
     open_texture,
     make_nte_role_title,
 )
-from ..scoring.contract import Scorer, ScoreResult, EquipmentView
+from ..scoring.contract import Scorer, ScoreResult, EquipmentView, HighlightPalette
 from ..scoring.registry import get_scorer, grade_badge
 from ..utils.damage.buffs import enemy_mods, scan_character_buffs
 from ..utils.resource.cdn import (
@@ -47,7 +47,8 @@ BODY_TOP = 248
 GAP = 28
 TEX = Path(__file__).parent / "texture2d" / "character"
 
-ROW_HILITE = (255, 0, 235)
+ROW_HILITE = (255, 0, 235)  # 高亮词条的默认紫：角色面板有效词条、装备主/副词条命中时用
+ROW_HILITE_LOCKED = (255, 145, 238)  # 浅紫：命中高亮但还没解锁的副词条行
 CRIT_COLOR = (255, 184, 120)
 ZERO_VALUES = {"", "0", "0%", "0.0", "0.0%"}
 
@@ -118,6 +119,15 @@ def _custom_panel_art(image: Image.Image) -> Image.Image:
     return Image.composite(panel_img, Image.new("RGBA", panel_size), panel_mask)
 
 
+def _hilite_color(score: ScoreResult, prop: CharacterProperty, locked: bool = False) -> tuple[int, int, int]:
+    """高亮词条用什么颜色：评分包自带配色就用它的，没有就默认紫（没解锁的行浅紫）。"""
+    if isinstance(score, HighlightPalette):
+        custom = score.highlight_color(prop, locked)
+        if custom is not None:
+            return custom
+    return ROW_HILITE_LOCKED if locked else ROW_HILITE
+
+
 async def _draw_attrs(
     canvas: Image.Image,
     draw: ImageDraw.ImageDraw,
@@ -130,7 +140,8 @@ async def _draw_attrs(
         icon = await _prop_icon(prop.id, 40)
         if icon is not None:
             canvas.alpha_composite(icon, (x + 10, y + 10))
-        color = ROW_HILITE if score is not None and score.is_role_prop_effective(prop) else COLOR_WHITE
+        # 角色面板：对该角色有效的词条高亮
+        color = _hilite_color(score, prop) if score is not None and score.is_role_prop_effective(prop) else COLOR_WHITE
         draw.text((x + 66, y + 31), prop.name, font=nte_font_origin(28), fill=color, anchor="lm")
         draw.text((x + 414, y + 31), _format_value(prop.value), font=nte_font_origin(34), fill=color, anchor="rm")
 
@@ -322,13 +333,12 @@ async def _draw_drive(
             if score is None:
                 color = COLOR_WHITE
             elif props is item.main_properties:
-                color = ROW_HILITE if score.is_main_prop_counted(prop) else COLOR_WHITE
+                # 装备主词条：计入评分的才高亮
+                color = _hilite_color(score, prop) if score.is_main_prop_counted(prop) else COLOR_WHITE
             else:
+                # 装备副词条：推荐词条高亮，没解锁的行取浅色
                 is_recommend = score.is_sub_prop_recommended(prop)
-                if locked:
-                    color = (255, 145, 238) if is_recommend else COLOR_WHITE
-                else:
-                    color = ROW_HILITE if is_recommend else COLOR_WHITE
+                color = _hilite_color(score, prop, locked) if is_recommend else COLOR_WHITE
             await _draw_drive_prop(canvas, draw, (x + 20, cursor), prop, color, locked)
             cursor += 49
 

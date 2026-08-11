@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from pathlib import Path
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -49,10 +49,11 @@ class EquipmentView(Protocol):
 
 class ScoreResult(Protocol):
     """一次角色评分的完整输出：总分/评级入库排序，判定方法驱动卡片词条高亮。
-    `display` 是角色卡上的总分文本（如 "87分" / "毕业度92.5%"）；榜单类卡片始终显示整数 `score`。"""
+    `display` 是角色卡上的总分文本（如 "87分" / "毕业度92.5%"）；榜单类卡片直接画 `score`
+    数值，可带小数（如 320.35），整数评分包返回 int 即可。"""
 
     @property
-    def score(self) -> int: ...
+    def score(self) -> float: ...
 
     @property
     def display(self) -> str: ...
@@ -68,6 +69,17 @@ class ScoreResult(Protocol):
     def is_main_prop_counted(self, prop: CharacterProperty) -> bool: ...
 
     def is_sub_prop_recommended(self, prop: CharacterProperty) -> bool: ...
+
+
+@runtime_checkable
+class HighlightPalette(Protocol):
+    """评分包想自己定高亮颜色，就给 ScoreResult 加这个方法；不加就全走默认紫。
+
+    只有判定为高亮的词条才会来问颜色，返回 None 表示这条不管、用默认色。
+    locked 是还没解锁的副词条，默认画得浅一点，自定义配色时最好也给浅色。
+    """
+
+    def highlight_color(self, prop: CharacterProperty, locked: bool) -> tuple[int, int, int] | None: ...
 
 
 class Scorer(Protocol):

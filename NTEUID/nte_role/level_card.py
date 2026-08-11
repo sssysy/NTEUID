@@ -67,7 +67,7 @@ class LevelEntry:
     fork_name: str
     fork_stage: int
     suit_pieces: int
-    score: int | None
+    score: float | None
     grade: str
 
 
@@ -102,8 +102,8 @@ async def build_level_entries(scorer: Scorer, characters: list[CharacterDetail])
             )
         )
 
-    def key(entry: LevelEntry) -> tuple[bool, int, int, int, int, str]:
-        rank_score = entry.score if entry.score is not None else 0
+    def key(entry: LevelEntry) -> tuple[bool, float, int, int, int, str]:
+        rank_score = entry.score if entry.score is not None else 0.0
         return (entry.score is None, -rank_score, -entry.quality.rank, -entry.alev, -entry.awaken, entry.char_id)
 
     return sorted(entries, key=key)
@@ -178,14 +178,14 @@ def _draw_colhead(canvas: Image.Image, draw: ImageDraw.ImageDraw) -> None:
         (165, "#"),
         (268, "角色"),
         (700, "Lv"),
-        (786, "觉醒"),
-        (872, "好感"),
-        (956, "普"),
-        (1018, "技"),
-        (1080, "终"),
-        (1142, "连"),
-        (1390, "武器"),
-        (1660, "套装 · 评分"),
+        (780, "觉醒"),
+        (860, "好感"),
+        (940, "普"),
+        (1002, "技"),
+        (1064, "终"),
+        (1126, "连"),
+        (1335, "武器"),
+        (1620, "套装 · 评分"),
     )
     for x, label in labels:
         draw.text((x, y), label, font=font, fill=COLOR_WHITE, anchor="mm")
@@ -212,49 +212,53 @@ async def _draw_row(
         canvas.alpha_composite(element.convert("RGBA").resize((44, 44), Image.Resampling.LANCZOS), (216, mid - 54))
     draw.text(
         (336, mid),
-        _fit(draw, entry.name, 340, nte_font_origin(40)),
+        _fit(draw, entry.name, 320, nte_font_origin(40)),
         font=nte_font_origin(40),
         fill=QUALITY_NAME[entry.quality],
         anchor="lm",
     )
 
     draw.text((700, mid), str(entry.alev), font=nte_font_origin(42), fill=COLOR_WHITE, anchor="mm")
-    draw.text((786, mid), str(entry.awaken), font=nte_font_origin(42), fill=AWAKEN_GOLD, anchor="mm")
-    draw.text((872, mid), str(entry.heart), font=nte_font_origin(42), fill=HEART_PINK, anchor="mm")
+    draw.text((780, mid), str(entry.awaken), font=nte_font_origin(42), fill=AWAKEN_GOLD, anchor="mm")
+    draw.text((860, mid), str(entry.heart), font=nte_font_origin(42), fill=HEART_PINK, anchor="mm")
 
     for index in range(4):
         text = str(entry.skills[index]) if index < len(entry.skills) else "-"
-        draw.text((956 + index * 62, mid), text, font=nte_font_origin(38), fill=COLOR_WHITE, anchor="mm")
+        draw.text((940 + index * 62, mid), text, font=nte_font_origin(38), fill=COLOR_WHITE, anchor="mm")
 
     if entry.fork_id:
         icon = await get_weapon_img(entry.fork_id)
         if icon is not None:
-            canvas.alpha_composite(icon.convert("RGBA").resize((72, 72), Image.Resampling.LANCZOS), (1188, mid - 36))
+            canvas.alpha_composite(icon.convert("RGBA").resize((72, 72), Image.Resampling.LANCZOS), (1166, mid - 36))
         draw.text(
-            (1270, mid - 15),
-            _fit(draw, entry.fork_name, 290, nte_font_origin(30)),
+            (1248, mid - 15),
+            _fit(draw, entry.fork_name, 270, nte_font_origin(30)),
             font=nte_font_origin(30),
             fill=COLOR_WHITE,
             anchor="lm",
         )
-        draw.text((1270, mid + 22), f"{entry.fork_stage}阶", font=nte_font_origin(24), fill=CYAN, anchor="lm")
+        draw.text((1248, mid + 22), f"{entry.fork_stage}阶", font=nte_font_origin(24), fill=CYAN, anchor="lm")
     else:
-        draw.text((1270, mid), "—", font=nte_font_origin(32), fill=SUBTEXT, anchor="lm")
+        draw.text((1248, mid), "—", font=nte_font_origin(32), fill=SUBTEXT, anchor="lm")
 
     grade_icon = grade_badge(scorer, entry.grade, 54)
     if grade_icon is not None:
-        canvas.alpha_composite(grade_icon, (1584, mid - 27))
+        canvas.alpha_composite(grade_icon, (1530, mid - 27))
     if entry.score is None:
-        draw.text((1740, mid), "--", font=nte_font_origin(44), fill=SUBTEXT, anchor="rm")
+        draw.text((1745, mid), "--", font=nte_font_origin(44), fill=SUBTEXT, anchor="rm")
     else:
+        score_text = f"{entry.score:g}"
+        font_size = 50
+        if (width := draw.textlength(score_text, font=nte_font_origin(font_size))) > 150:
+            font_size = max(24, int(font_size * 150 / width))
         draw.text(
-            (1740, mid - 10),
-            str(entry.score),
-            font=nte_font_origin(50),
+            (1745, mid - 10),
+            score_text,
+            font=nte_font_origin(font_size),
             fill=grade_color(scorer, entry.grade),
             anchor="rm",
         )
-        draw.text((1740, mid + 32), f"· {entry.suit_pieces}件", font=nte_font_origin(24), fill=SUBTEXT, anchor="rm")
+        draw.text((1745, mid + 32), f"· {entry.suit_pieces}件", font=nte_font_origin(24), fill=SUBTEXT, anchor="rm")
 
 
 async def draw_level_img(ev: Event, role_name: str, uid: str, characters: list[CharacterDetail]) -> bytes:

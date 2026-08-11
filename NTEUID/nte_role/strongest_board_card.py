@@ -40,7 +40,7 @@ class BoardEntry:
     suit_pieces: int
     holder_name: str
     holder_uid: str
-    score: int
+    score: float
     grade: str
 
 
@@ -109,20 +109,24 @@ async def _draw_row(canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int, entr
     if icon is not None:
         canvas.alpha_composite(icon.convert("RGBA").resize((78, 78), Image.Resampling.LANCZOS), (560, mid - 39))
     draw.text(
-        (652, mid),
-        _fit(draw, f"{entry.suit_name} · {entry.suit_pieces}件", 350, nte_font_origin(28)),
-        font=nte_font_origin(28),
+        (646, mid),
+        _fit(draw, f"{entry.suit_name} · {entry.suit_pieces}件", 305, nte_font_origin(26)),
+        font=nte_font_origin(26),
         fill=COLOR_WHITE,
         anchor="lm",
     )
     # 评级图标 + 分数
     badge = grade_badge(scorer, entry.grade, 76)
     if badge is not None:
-        canvas.alpha_composite(badge, (1014, mid - 38))
+        canvas.alpha_composite(badge, (960, mid - 38))
+    score_text = f"{entry.score:g}"
+    font_size = 52
+    if (width := draw.textlength(score_text, font=nte_font_origin(font_size))) > 150:
+        font_size = max(24, int(font_size * 150 / width))
     draw.text(
         (1196, mid - 16),
-        str(entry.score),
-        font=nte_font_origin(52),
+        score_text,
+        font=nte_font_origin(font_size),
         fill=grade_color(scorer, entry.grade),
         anchor="rm",
     )

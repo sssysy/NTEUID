@@ -44,7 +44,7 @@ class RankEntry:
     suit_id: str
     suit_name: str
     suit_pieces: int
-    score: int
+    score: float
     grade: str
 
 
@@ -124,16 +124,20 @@ async def _draw_row(
     icon = await get_char_suit_detail_img(entry.suit_id) if entry.suit_id else None
     if icon is not None:
         canvas.alpha_composite(icon.convert("RGBA").resize((78, 78), Image.Resampling.LANCZOS), (540, mid - 39))
-    text = _fit(draw, f"{entry.suit_name} · {entry.suit_pieces}件", 380, nte_font_origin(28))
-    draw.text((632, mid), text, font=nte_font_origin(28), fill=COLOR_WHITE, anchor="lm")
+    text = _fit(draw, f"{entry.suit_name} · {entry.suit_pieces}件", 320, nte_font_origin(26))
+    draw.text((626, mid), text, font=nte_font_origin(26), fill=COLOR_WHITE, anchor="lm")
     # 评级图标 + 分数（按评级配色）
     badge = grade_badge(scorer, entry.grade, 76)
     if badge is not None:
-        canvas.alpha_composite(badge, (1014, mid - 38))
+        canvas.alpha_composite(badge, (960, mid - 38))
+    score_text = f"{entry.score:g}"
+    font_size = 52
+    if (width := draw.textlength(score_text, font=nte_font_origin(font_size))) > 150:
+        font_size = max(24, int(font_size * 150 / width))
     draw.text(
         (1196, mid - 16),
-        str(entry.score),
-        font=nte_font_origin(52),
+        score_text,
+        font=nte_font_origin(font_size),
         fill=grade_color(scorer, entry.grade),
         anchor="rm",
     )

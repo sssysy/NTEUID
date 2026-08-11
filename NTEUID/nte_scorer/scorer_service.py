@@ -76,7 +76,8 @@ async def run_scorer_add(bot: Bot, ev: Event, url: str) -> None:
 
 
 async def run_scorer_update(bot: Bot, ev: Event, name: str) -> None:
-    """带包名更新单个；不带包名更新 scorers/ 下所有 git 安装的包。"""
+    """带包名更新单个；不带包名更新 scorers/ 下所有 git 安装的包。
+    强制对齐远端（fetch + reset --hard），评分包的本地改动会被丢弃。"""
     if name:
         path = SCORERS_PATH / name
         if not path.is_dir():
@@ -89,7 +90,9 @@ async def run_scorer_update(bot: Bot, ev: Event, name: str) -> None:
             return await send_nte_notify(bot, ev, ScorerMsg.NO_PACK)
     lines = []
     for pack in packs:
-        code, output = await _run_git("pull", "--ff-only", cwd=pack)
+        code, output = await _run_git("fetch", cwd=pack)
+        if code == 0:
+            code, output = await _run_git("reset", "--hard", "@{u}", cwd=pack)
         tail = output.rsplit("\n", 1)[-1][-60:]
         lines.append(f"· {pack.name}: {'✅' if code == 0 else '❌'} {tail}")
     await send_nte_notify(bot, ev, ScorerMsg.batch_updated(lines))

@@ -762,7 +762,7 @@ class NTEGroupMember(BaseIDModel, table=True):
 class NTECharData(BaseIDModel, table=True):
     """个人数据表，一行 = (uid, char_id)，取代旧的 playerinfo/{uid}.json 文件。
     只放与角色绑定的数据：`detail`（该角色完整 JSON，觉醒 / 套装 等出榜字段都在里面）、
-    `score`（int 排序键走索引）、`grade`（detail 里没有、我们算的；空 = 不可评分）和
+    `score`（float 排序键走索引）、`grade`（detail 里没有、我们算的；空 = 不可评分）和
     `scorer`（产出该分数的评分 provider id；不同算法的分数不可比，排行只在同 provider 行之间排）。
     身份（user_id / role_name）不在这里，统一从 NTEUser 按 uid 现查——本群排名 / bot排名
     都这样取身份出榜 + 标红。排名只投影 (uid, score, grade) 按 score 倒序；展示的 ≤21 行
@@ -773,7 +773,7 @@ class NTECharData(BaseIDModel, table=True):
     uid: str = Field(default="", index=True, title="角色roleId")
     char_id: str = Field(default="", index=True, title="可玩角色charId")
     detail: str = Field(default="", title="该角色完整JSON")
-    score: int = Field(default=0, title="评分")
+    score: float = Field(default=0.0, title="评分")
     grade: str = Field(default="", title="评级(空=不可评分)")
     scorer: str = Field(default="", title="评分provider")
     updated_at: datetime = Field(
@@ -832,7 +832,7 @@ class NTECharData(BaseIDModel, table=True):
         scorer: str,
         uids: list[str] | None = None,
         limit: int | None = None,
-    ) -> list[tuple[str, int, str]]:
+    ) -> list[tuple[str, float, str]]:
         """某角色可评分行按 score 倒序，投影 (uid, score, grade)；只比同 `scorer` 产出的分数。
         `uids` 给定 = 本群排名（按这批 uid 过滤）；为 None = bot排名（扫全表）。
         """
@@ -880,7 +880,7 @@ class NTECharData(BaseIDModel, table=True):
         char_id: str,
         scorer: str,
         uids: list[str] | None = None,
-    ) -> tuple[str, int, str] | None:
+    ) -> tuple[str, float, str] | None:
         """某角色最高分账号；最强面板只需要第一名，不能复用全榜查询。"""
         stmt = (
             select(col(cls.uid), col(cls.score), col(cls.grade))
@@ -907,7 +907,7 @@ class NTECharData(BaseIDModel, table=True):
         char_id: str,
         scorer: str,
         uid: str,
-        score: int,
+        score: float,
         uids: list[str] | None = None,
     ) -> int:
         """按 rank_for_char 的排序规则计算单行名次，用于只补一条掉榜自己的记录。"""
@@ -935,7 +935,7 @@ class NTECharData(BaseIDModel, table=True):
         session: AsyncSession,
         scorer: str,
         uids: list[str] | None = None,
-    ) -> list[tuple[str, str, int, str]]:
+    ) -> list[tuple[str, str, float, str]]:
         """每个角色评分最高的一行 (char_id, uid, score, grade)，按 score 降序——最强排行用。
         只比同 `scorer` 产出的分数。`uids` 给定 = 本群(按这批号过滤)；None = bot(全表)。
         DB 侧 `GROUP BY char_id` + `MAX(score)` 直接算完，只回每角色一行(~几十行)——

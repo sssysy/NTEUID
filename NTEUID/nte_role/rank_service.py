@@ -51,7 +51,7 @@ async def _send_rank(
         self_uids = await NTEUser.uids_of_user(ev.user_id, ev.bot_id)
 
     need = [uid for uid, _, _ in show]
-    overflow: tuple[int, tuple[str, int, str]] | None = None
+    overflow: tuple[int, tuple[str, float, str]] | None = None
     if self_uids and {uid for uid, _, _ in show}.isdisjoint(self_uids):
         self_row = await NTECharData.best_for_char(char_id, scorer.scorer_id, list(self_uids))
         if self_row is not None:
@@ -67,7 +67,7 @@ async def _send_rank(
     identity = group_identity if group_identity is not None else await NTEUser.identity_by_uids(need)
     details = await NTECharData.details_for(need, char_id)
 
-    def build(row: tuple[str, int, str]) -> RankEntry:
+    def build(row: tuple[str, float, str]) -> RankEntry:
         uid, score, grade = row
         user_id, role_name = identity[uid]
         char = CharacterDetail.model_validate(json.loads(details[uid]))
