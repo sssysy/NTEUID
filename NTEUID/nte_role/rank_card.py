@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageChops
 from gsuid_core.models import Event
 from gsuid_core.utils.image.convert import convert_img
 
-from ..utils.image import COLOR_WHITE, SmoothDrawer, add_footer, get_nte_bg, open_texture, char_img_ring
+from ..utils.image import COLOR_GOLD, COLOR_WHITE, SmoothDrawer, add_footer, get_nte_bg, open_texture, char_img_ring
 from ..utils.avatar import fetch_avatar
 from ..scoring.contract import Scorer
 from ..scoring.registry import grade_badge, grade_color
@@ -145,7 +145,13 @@ async def _draw_row(
 
 
 async def _draw_header(
-    canvas: Image.Image, draw: ImageDraw.ImageDraw, char_name: str, char_id: str, total: int, scope_label: str
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    char_name: str,
+    char_id: str,
+    total: int,
+    scope_label: str,
+    scorer: Scorer,
 ) -> None:
     # 标题压暗罩：顶部留出霓虹天际线，越往下越暗
     scrim = Image.new("RGBA", (1, HEADER_H))
@@ -166,9 +172,17 @@ async def _draw_header(
     )
     draw.text((52, 304), f"「{char_name}」评分排名", font=nte_font_origin(64), fill=COLOR_WHITE, anchor="lm")
     SmoothDrawer().rounded_rectangle((54, 346, 318, 353), 3, fill=(251, 221, 188, 240), target=canvas)
-    draw.text(
-        (56, 380), f"{scope_label} {total} 个号上榜 · 按评分降序", font=nte_font_origin(28), fill=SUBTEXT, anchor="lm"
-    )
+    scope_text = f"{scope_label} {total} 个号上榜"
+    font = nte_font_origin(28)
+    if scorer.meta.description:
+        suffix = f" · {scope_text}"
+        suffix_width = round(draw.textlength(suffix, font=font))
+        description = _fit(draw, scorer.meta.description, 760 - suffix_width, font)
+        draw.text((56, 380), description, font=font, fill=COLOR_GOLD, anchor="lm")
+        description_width = round(draw.textlength(description, font=font))
+        draw.text((56 + description_width, 380), suffix, font=font, fill=SUBTEXT, anchor="lm")
+    else:
+        draw.text((56, 380), scope_text, font=font, fill=SUBTEXT, anchor="lm")
 
 
 async def draw_rank_img(
@@ -193,7 +207,7 @@ async def draw_rank_img(
     canvas = get_nte_bg(WIDTH, height, bg="bg4").convert("RGBA")
     canvas.alpha_composite(_vgradient(height, INDIGO_TOP, INDIGO_BOTTOM, 70))
     draw = ImageDraw.Draw(canvas)
-    await _draw_header(canvas, draw, char_name, char_id, total, scope_label)
+    await _draw_header(canvas, draw, char_name, char_id, total, scope_label, scorer)
 
     y = HEADER_H
     for index, ((rank, entry, is_self), avatar) in enumerate(zip(display, avatars)):

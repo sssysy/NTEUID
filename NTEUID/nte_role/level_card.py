@@ -12,6 +12,7 @@ from gsuid_core.utils.image.image_tools import get_event_avatar
 
 from .heartlike import heart_level
 from ..utils.image import (
+    COLOR_GOLD,
     COLOR_WHITE,
     add_footer,
     get_nte_bg,
@@ -155,7 +156,13 @@ def _stretch_bar(name: str, height: int, cap: int) -> Image.Image:
 
 
 async def _draw_banner(
-    canvas: Image.Image, draw: ImageDraw.ImageDraw, ev: Event, role_name: str, uid: str, total: int
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    ev: Event,
+    role_name: str,
+    uid: str,
+    total: int,
+    scorer: Scorer,
 ) -> None:
     canvas.alpha_composite(_title_banner(), (0, 0))
     canvas.alpha_composite(_vgrad(WIDTH, 176, (8, 6, 20), 0, 220), (0, BANNER_H - 176))
@@ -168,6 +175,9 @@ async def _draw_banner(
     canvas.alpha_composite(avatar, (40, 164))
     draw.text((182, 208), role_name, font=nte_font_origin(44), fill=COLOR_WHITE, anchor="lm")
     draw.text((184, 260), f"UID {uid} · 共 {total} 名角色", font=nte_font_origin(28), fill=SUBTEXT, anchor="lm")
+    if scorer.meta.description:
+        description = _fit(draw, scorer.meta.description, 880, nte_font_origin(26))
+        draw.text((1812, 260), description, font=nte_font_origin(26), fill=COLOR_GOLD, anchor="rm")
 
 
 def _draw_colhead(canvas: Image.Image, draw: ImageDraw.ImageDraw) -> None:
@@ -276,7 +286,7 @@ async def draw_level_img(ev: Event, role_name: str, uid: str, characters: list[C
     canvas.alpha_composite(Image.new("RGBA", (WIDTH, height), (10, 9, 24, 170)))
     draw = ImageDraw.Draw(canvas)
 
-    await _draw_banner(canvas, draw, ev, role_name, uid, len(entries))
+    await _draw_banner(canvas, draw, ev, role_name, uid, len(entries), scorer)
     _draw_colhead(canvas, draw)
 
     y = BANNER_H + COLHEAD_H

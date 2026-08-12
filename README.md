@@ -7,7 +7,8 @@
 <h4 align = "center">🚧支持OneBot(QQ)、QQ频道、微信、开黑啦、Telegram的异环插件🚧</h4>
 <div align="center">
   <a href="https://docs.sayu-bot.com/" target="_blank">安装文档</a> &nbsp; · &nbsp;
-  <a href="https://github.com/Genshin-bots/gsuid_core" target="_blank">gsuid_core</a>
+  <a href="https://github.com/Genshin-bots/gsuid_core" target="_blank">gsuid_core</a> &nbsp; · &nbsp;
+  <a href="NTEUID/scoring/README.md">评分系统与评分包</a>
 </div>
 
 ## 丨安装提醒

@@ -23,7 +23,7 @@ YIHUAN_TASK_COMMUNITY_IDS: tuple[str, ...] = (TAJIDUO_COMMUNITY_YIHUAN,)
 
 # 异环公告（匿名社区接口）目标社区 / 栏目
 NOTICE_COMMUNITY_NAME: str = "异环"
-NOTICE_COLUMN_NAME: str = "「袋先生」邮箱"
+NOTICE_COLUMN_NAME: str = "官方资讯"
 
 # 金币任务 taskKey（来自 /apihub/api/getUserTasks）
 TASK_KEY_BROWSE_POST: str = "browse_post_c"

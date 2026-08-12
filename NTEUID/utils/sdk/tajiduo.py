@@ -527,7 +527,7 @@ class TajiduoWebClient(_TajiduoBase):
                     if column_id is None:
                         raise TajiduoError("社区栏目 id 缺失", column)
                     return int(column_id)
-        raise TajiduoError("未找到袋先生邮箱栏目")
+        raise TajiduoError(f"未找到{NOTICE_COLUMN_NAME}栏目")
 
     async def get_notice_list(
         self,
