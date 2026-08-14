@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    {% if board_kind == "profit" %}
+    --accent: #FF4F91;
+    --accent-soft: rgba(255, 79, 145, 0.15);
+    --accent-glow: rgba(255, 79, 145, 0.34);
+    {% else %}
+    --accent: #67E4F3;
+    --accent-soft: rgba(103, 228, 243, 0.15);
+    --accent-glow: rgba(103, 228, 243, 0.34);
+    {% endif %}
+    width: 780px;
+    margin: 0;
+    color: #F7F7F2;
+    background: #090A0F;
+    font-family: NTEFont, sans-serif;
+  }
+  .card {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 88% 56%, var(--accent-soft), transparent 31%),
+      linear-gradient(180deg, #12131A 0, #090A0F 100%);
+  }
+  .hero {
+    position: relative;
+    height: 274px;
+    padding: 26px 32px 28px;
+    overflow: hidden;
+    background-image:
+      linear-gradient(90deg, rgba(5, 6, 10, 0.92) 0%, rgba(5, 6, 10, 0.55) 48%, rgba(5, 6, 10, 0.1) 78%),
+      linear-gradient(0deg, #090A0F 0%, transparent 38%),
+      url('{{ rank_bg }}');
+    background-size: cover;
+    background-position: center 43%;
+  }
+  .hero::before {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    bottom: 20px;
+    left: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-left-color: var(--accent);
+    content: "";
+  }
+  .hero::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 12px;
+    background-color: #18191F;
+    background-image:
+      linear-gradient(45deg, var(--accent) 25%, transparent 25%, transparent 75%, var(--accent) 75%),
+      linear-gradient(45deg, var(--accent) 25%, transparent 25%, transparent 75%, var(--accent) 75%);
+    background-position: 0 0, 6px 6px;
+    background-size: 12px 12px;
+    opacity: 0.8;
+    content: "";
+  }
+  .hero-top,
+  .hero-copy {
+    position: relative;
+    z-index: 1;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    flex: 1;
+  }
+  .brand img {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .brand-copy {
+    margin-left: 11px;
+  }
+  .brand-name {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .brand-code {
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.54);
+    font-size: 9px;
+    letter-spacing: 2px;
+  }
+  .tag {
+    margin-left: 8px;
+    padding: 7px 12px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(8, 9, 14, 0.72);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .tag-accent {
+    color: #090A0F;
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .hero-copy {
+    position: absolute;
+    bottom: 34px;
+    left: 32px;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
+  }
+  .eyebrow::before {
+    width: 34px;
+    height: 3px;
+    margin-right: 10px;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+    content: "";
+  }
+  h1 {
+    margin: 5px 0 0;
+    font-size: 48px;
+    line-height: 1;
+    letter-spacing: 4px;
+    text-shadow: 0 3px 20px rgba(0, 0, 0, 0.86);
+  }
+  .period {
+    margin-top: 10px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+  .content {
+    position: relative;
+    padding: 22px 30px 18px;
+  }
+  .content::before {
+    position: absolute;
+    top: 0;
+    right: 24px;
+    width: 126px;
+    height: 42px;
+    border-top: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
+    opacity: 0.5;
+    content: "";
+  }
+  .summary {
+    display: flex;
+    margin-bottom: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.045);
+  }
+  .summary-cell {
+    flex: 1;
+    padding: 11px 15px 10px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .summary-cell:last-child {
+    border-right: 0;
+  }
+  .summary-label {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+  }
+  .summary-value {
+    margin-top: 4px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .summary-value.accent {
+    color: var(--accent);
+  }
+  .rank-row {
+    --rank-color: var(--accent);
+    --rank-soft: var(--accent-soft);
+    --rank-border: rgba(255, 255, 255, 0.12);
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 98px;
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid var(--rank-border);
+    border-left: 4px solid var(--rank-color);
+    background:
+      linear-gradient(90deg, var(--rank-soft), transparent 26%),
+      rgba(255, 255, 255, 0.045);
+  }
+  .rank-row::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 42px;
+    height: 4px;
+    background: var(--rank-color);
+    content: "";
+  }
+  .rank-row.rank-1 {
+    --rank-color: #F6CF78;
+    --rank-soft: rgba(246, 207, 120, 0.16);
+    --rank-border: rgba(246, 207, 120, 0.42);
+  }
+  .rank-row.rank-2 {
+    --rank-color: #C4CBD0;
+    --rank-soft: rgba(196, 203, 208, 0.14);
+    --rank-border: rgba(196, 203, 208, 0.38);
+  }
+  .rank-row.rank-3 {
+    --rank-color: #B8754F;
+    --rank-soft: rgba(184, 117, 79, 0.16);
+    --rank-border: rgba(184, 117, 79, 0.42);
+  }
+  .rank-row.self {
+    border-color: var(--accent);
+    border-left-color: var(--rank-color);
+    box-shadow: 0 0 20px var(--accent-glow), inset 0 0 28px var(--accent-soft);
+    background:
+      linear-gradient(90deg, var(--rank-soft), transparent 42%),
+      rgba(255, 255, 255, 0.065);
+  }
+  .overflow-divider {
+    display: flex;
+    align-items: center;
+    margin: 20px 0 2px;
+    color: var(--accent);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  .overflow-divider::before,
+  .overflow-divider::after {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent));
+    content: "";
+    flex: 1;
+  }
+  .overflow-divider::after {
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .overflow-divider span {
+    margin: 0 14px;
+  }
+  .rank-index {
+    width: 64px;
+    padding-left: 12px;
+    color: var(--rank-color);
+    font-size: 29px;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: -1px;
+  }
+  .rank-index span {
+    display: block;
+    margin-bottom: -3px;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 8px;
+    font-style: normal;
+    letter-spacing: 1px;
+  }
+  .avatar-frame {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: #11131A;
+  }
+  .avatar-frame::before,
+  .avatar-frame::after {
+    position: absolute;
+    width: 13px;
+    height: 3px;
+    background: var(--accent);
+    content: "";
+  }
+  .avatar-frame::before {
+    top: -2px;
+    left: -2px;
+  }
+  .avatar-frame::after {
+    right: -2px;
+    bottom: -2px;
+  }
+  .avatar {
+    display: block;
+    width: 54px;
+    height: 54px;
+    object-fit: cover;
+  }
+  .identity {
+    width: 156px;
+    padding: 0 13px;
+  }
+  .role-name {
+    overflow: hidden;
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .uid {
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 9px;
+    letter-spacing: 0.7px;
+    white-space: nowrap;
+  }
+  .rank-row.self .role-name,
+  .rank-row.self .uid {
+    color: var(--accent);
+  }
+  .metrics {
+    display: flex;
+    flex: 1;
+    align-items: stretch;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .metric {
+    width: 75px;
+    padding: 5px 7px;
+  }
+  .metric-label {
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 9px;
+  }
+  .metric-value {
+    margin-top: 7px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .metric-value.rate {
+    color: var(--accent);
+  }
+  .net {
+    width: 132px;
+    padding-right: 14px;
+    text-align: right;
+  }
+  .net-label {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+  .net-value {
+    margin-top: 5px;
+    color: var(--accent);
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+    text-shadow: 0 0 16px var(--accent-glow);
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 220px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background:
+      linear-gradient(135deg, transparent 48%, var(--accent-soft) 49%, var(--accent-soft) 51%, transparent 52%),
+      rgba(255, 255, 255, 0.035);
+  }
+  .empty-code {
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 4px;
+  }
+  .empty-title {
+    margin-top: 12px;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .empty-note {
+    margin-top: 7px;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+  }
+  .footer-checker {
+    height: 8px;
+    background-color: #15161C;
+    background-image:
+      linear-gradient(45deg, var(--accent) 25%, transparent 25%, transparent 75%, var(--accent) 75%),
+      linear-gradient(45deg, var(--accent) 25%, transparent 25%, transparent 75%, var(--accent) 75%);
+    background-position: 0 0, 4px 4px;
+    background-size: 8px 8px;
+    opacity: 0.65;
+  }
+  .footer {
+    display: flex;
+    align-items: center;
+    height: 54px;
+    padding: 0 30px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #07080C;
+  }
+  .footer img {
+    width: 190px;
+  }
+  .footer span {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="hero">
+      <div class="hero-top">
+        <div class="brand">
+          <img src="{{ icon }}">
+          <div class="brand-copy">
+            <div class="brand-name">喵呜快报</div>
+            <div class="brand-code">NTE · SCRATCH DATA UNIT</div>
+          </div>
+        </div>
+        <div class="tag">{{ scope_label }}排行</div>
+        <div class="tag tag-accent">{{ label }}</div>
+      </div>
+      <div class="hero-copy">
+        <div class="eyebrow">{{ board_subtitle }}</div>
+        <h1>{{ board_title }}</h1>
+        <div class="period">RANK TIME / {{ period }}</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="summary">
+        <div class="summary-cell">
+          <div class="summary-label">RANK SCOPE</div>
+          <div class="summary-value">{{ scope_label }} · {{ label }}</div>
+        </div>
+        <div class="summary-cell">
+          <div class="summary-label">SYNCED ACCOUNTS</div>
+          <div class="summary-value">{{ account_total }} 个账号</div>
+        </div>
+        <div class="summary-cell">
+          <div class="summary-label">BOARD ACCOUNTS</div>
+          <div class="summary-value accent">{{ board_total }} 人符合</div>
+        </div>
+        <div class="summary-cell">
+          <div class="summary-label">SCRATCH RECORDS</div>
+          <div class="summary-value">{{ record_total }} 次</div>
+        </div>
+      </div>
+
+      {% if entries %}
+      {% for entry in entries %}
+      {% if entry.overflow %}
+      <div class="overflow-divider"><span>当前账号未进入前 {{ rank_limit }} · 以下为真实名次</span></div>
+      {% endif %}
+      <div class="rank-row{% if entry.rank <= 3 %} rank-{{ entry.rank }}{% endif %}{% if entry.is_self %} self{% endif %}">
+        <div class="rank-index"><span>NO.</span>{{ entry.rank_text }}</div>
+        <div class="avatar-frame"><img class="avatar" src="{{ entry.avatar }}"></div>
+        <div class="identity">
+          <div class="role-name">{{ entry.role_name|e }}</div>
+          <div class="uid">UID {{ entry.uid|e }}</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">投入</div>
+            <div class="metric-value">{{ entry.cost }}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">返还</div>
+            <div class="metric-value">{{ entry.gain }}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">次数</div>
+            <div class="metric-value">{{ entry.count }}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">收益率</div>
+            <div class="metric-value rate">{{ entry.profit_rate }}</div>
+          </div>
+        </div>
+        <div class="net">
+          <div class="net-label">{{ value_label }}</div>
+          <div class="net-value">{{ entry.net }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="empty">
+        <div class="empty-code">NO RANK DATA / 00</div>
+        <div class="empty-title">{{ empty_text }}</div>
+        <div class="empty-note">本榜仅展示该统计时段内已同步且符合条件的账号</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="footer-checker"></div>
+    <div class="footer">
+      <img src="{{ footer }}">
+      <span>数据来自完美世界客服中心 · 仅统计已同步刮刮乐记录</span>
+    </div>
+  </div>
+</body>
+</html>

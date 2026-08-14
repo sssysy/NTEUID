@@ -1,0 +1,230 @@
+{% extends "_card_base.html.j2" %}
+
+{% set tone = '#F03E6B' if stats.net >= 0 else '#35C8D6' %}
+{% set tone_fill = 'rgba(240, 62, 107, 0.15)' if stats.net >= 0 else 'rgba(53, 200, 214, 0.15)' %}
+
+{% block css %}
+  .panel-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #FFFFFF;
+  }
+  .panel-note {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .overview {
+    display: flex;
+    margin-top: 10px;
+  }
+  .overview-left {
+    display: flex;
+    flex-direction: column;
+    width: 46%;
+  }
+  .net-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+  .net-value {
+    font-size: {{ 24 if stats.net|abs >= 10000000 else 28 }}px;
+    font-weight: bold;
+    color: {{ tone }};
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .net-pill {
+    font-size: 10px;
+    font-weight: bold;
+    color: {{ tone }};
+    background-color: {{ tone_fill }};
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-top: 6px;
+    align-self: flex-start;
+  }
+  .overview-right {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    padding-left: 14px;
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+    margin-top: 6px;
+  }
+  .metric-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+  .metric-value {
+    font-size: 14px;
+    font-weight: bold;
+    color: #FFFFFF;
+    margin-top: 2px;
+  }
+  .chart {
+    margin-top: 10px;
+  }
+  .chart-dates {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 2px;
+  }
+  .book {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 9px;
+  }
+  .book-name {
+    font-size: 12px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.9);
+  }
+  .book-sub {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 2px;
+  }
+  .book-net {
+    font-size: 13px;
+    font-weight: bold;
+    text-align: right;
+  }
+  .book-rate {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+    margin-top: 2px;
+  }
+  .strip {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .strip-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 25%;
+  }
+{% endblock %}
+
+{% block content -%}
+  <div class="panel" style="margin-top: 16px">
+    <div class="panel-title">
+      <div class="panel-label">刮刮乐统计</div>
+      <div class="panel-note">近 {{ stats.span_days }} 天 · {{ stats.start_at.strftime('%m-%d') }} ~ {{ stats.end_at.strftime('%m-%d') }}</div>
+    </div>
+    <div class="overview">
+      <div class="overview-left">
+        <div class="net-label">{% if stats.net < 0 %}净亏损{% elif stats.net > 0 %}净盈利{% else %}净盈亏{% endif %}</div>
+        <div class="net-value">{{ signed_money(stats.net) }}</div>
+        <div class="net-pill">{% if stats.net < 0 %}亏损率{% elif stats.net > 0 %}盈利率{% else %}盈亏率{% endif %} {{ '%+.1f' | format(stats.profit_rate) }}%</div>
+      </div>
+      <div class="overview-right">
+        <div class="metric">
+          <div class="metric-label">总投入</div>
+          <div class="metric-value">{{ money(stats.total_cost) }}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">总返还</div>
+          <div class="metric-value">{{ money(stats.total_gain) }}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">刮卡次数</div>
+          <div class="metric-value">{{ stats.total_count }} 次</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">回本率</div>
+          <div class="metric-value" style="color: {{ tone }}">{{ '%.1f' | format(stats.return_rate) }}%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if stats.extra_awards %}
+  <div class="panel">
+    <div class="panel-title">
+      <div class="panel-label">附赠道具</div>
+      <div class="panel-note">{{ stats.total_extra }} 个</div>
+    </div>
+    {% for name, count in stats.extra_awards %}
+    <div class="book">
+      <div class="book-name">{{ name|e }}</div>
+      <div class="book-net" style="color: #35C8D6">{{ count }} 个</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="panel-title">
+      <div class="panel-label">累计盈亏走势</div>
+      <div class="panel-note" style="color: {{ tone }}">期末 {{ signed_money(stats.net) }}</div>
+    </div>
+    <svg class="chart" width="100%" height="120" viewBox="0 0 320 120" preserveAspectRatio="none">
+      <line x1="0" y1="30" x2="320" y2="30" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <line x1="0" y1="60" x2="320" y2="60" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <line x1="0" y1="90" x2="320" y2="90" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <line x1="0" y1="{{ curve.zero_y }}" x2="320" y2="{{ curve.zero_y }}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+      <polygon points="{{ curve.area }}" fill="{{ tone_fill }}"/>
+      <polyline points="{{ curve.line }}" fill="none" stroke="{{ tone }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="chart-dates">
+      <div>{{ stats.start_at.strftime('%m-%d') }}</div>
+      <div>{{ stats.end_at.strftime('%m-%d') }}</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <div class="panel-label">读物盈亏</div>
+      <div class="panel-note">粉涨青跌</div>
+    </div>
+    {% for book in stats.books %}
+    <div class="book">
+      <div>
+        <div class="book-name">{{ book.name|e }}</div>
+        <div class="book-sub">{{ book.count }} 次 · 投入 {{ money(book.cost) }}</div>
+      </div>
+      <div>
+        <div class="book-net" style="color: {{ '#F03E6B' if book.net >= 0 else '#35C8D6' }}">{{ signed_money(book.net) }}</div>
+        <div class="book-rate">回本 {{ '%.1f' | format(book.return_rate) }}%</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="panel">
+    <div class="strip">
+      <div class="strip-item">
+        <div class="metric-label">中奖率</div>
+        <div class="metric-value">{{ '%.1f' | format(stats.hit_rate) }}%</div>
+      </div>
+      <div class="strip-item">
+        <div class="metric-label">单笔最高</div>
+        <div class="metric-value" style="color: #F5C451">{{ money(stats.max_award) }}</div>
+      </div>
+      <div class="strip-item">
+        <div class="metric-label">最佳单日</div>
+        <div class="metric-value" style="color: #F03E6B">{{ signed_money(stats.best_day.net) }}</div>
+      </div>
+      <div class="strip-item">
+        <div class="metric-label">最差单日</div>
+        <div class="metric-value" style="color: #35C8D6">{{ signed_money(stats.worst_day.net) }}</div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

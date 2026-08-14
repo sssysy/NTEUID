@@ -4,7 +4,7 @@
         "data": [
             {
                 "name": "登录",
-                "desc": "扫码登录塔吉多账号；登录后自动绑定主游戏（异环）主角色",
+                "desc": "打开统一登录页，可选择塔吉多登录或完美登录；完美登录用于查询刮刮乐数据",
                 "eg": "登录",
                 "need_ck": false,
                 "need_sk": false,
@@ -52,7 +52,7 @@
             },
             {
                 "name": "查看",
-                "desc": "查看当前已绑定的全部塔吉多账号",
+                "desc": "图卡展示已绑定的塔吉多账号与完美账号",
                 "eg": "查看",
                 "need_ck": true,
                 "need_sk": false,
@@ -63,6 +63,22 @@
                 "desc": "在多账号之间切换默认账号",
                 "eg": "切换10177461",
                 "need_ck": true,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "完美切换",
+                "desc": "不带参数轮换完美账号，追加角色 UID 可精确切换",
+                "eg": "完美切换",
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "完美登出",
+                "desc": "删除当前用户保存的完美登录会话、刮刮乐流水和群榜登记",
+                "eg": "完美登出",
+                "need_ck": false,
                 "need_sk": false,
                 "need_admin": false
             }
@@ -164,6 +180,30 @@
                 "desc": "本性像素 / 都市活力 / 活跃度 / 周本剩余",
                 "eg": "体力",
                 "need_ck": true,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "刮刮乐",
+                "desc": "同步完美世界客服近 60 天刮刮乐流水并生成个人盈亏图；需先完成完美登录",
+                "eg": "刮刮乐",
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "刮刮乐排行",
+                "desc": "分开发送亏损榜和盈利榜，每榜最多 20 人；当前完美账号掉榜时在底部补充真实名次",
+                "eg": "刮刮乐排行",
+                "need_ck": false,
+                "need_sk": false,
+                "need_admin": false
+            },
+            {
+                "name": "刮刮乐bot排行",
+                "desc": "查看当前 BOT 的刮刮乐排行；可组合今日/昨日/本周/上周和亏损榜/盈利榜",
+                "eg": "本周刮刮乐bot盈利榜",
+                "need_ck": false,
                 "need_sk": false,
                 "need_admin": false
             }

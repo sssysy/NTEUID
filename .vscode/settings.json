@@ -10,9 +10,5 @@
     }
   },
   "python.defaultInterpreterPath": "../../../.venv/bin/python",
-  "basedpyright.analysis.typeCheckingMode": "basic",
-  "basedpyright.analysis.extraPaths": [
-    "${workspaceFolder}/../../../"
-  ],
   "python.analysis.typeCheckingMode": "off",
 }

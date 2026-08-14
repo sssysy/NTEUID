@@ -5,7 +5,7 @@ import json
 import time
 import asyncio
 import hashlib
-from typing import Protocol
+from typing import Literal, Protocol, Annotated
 from dataclasses import dataclass
 from collections.abc import Callable
 
@@ -24,33 +24,41 @@ def _login_ttl_s() -> int:
     return NTEConfig.get_config("NTELoginTTL").data
 
 
-@dataclass(frozen=True)
-class TransportResult:
-    status: str  # success | failed | expired
-    msg: str = ""
-    laohu_token: str = ""
-    laohu_user_id: str = ""
-
-
 class TransportError(RuntimeError):
     pass
 
 
 class _ProtocolModel(BaseModel):
-    """nte-login 服务回执的解析基类。"""
-
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
-class _Credential(_ProtocolModel):
+class LaohuCredential(_ProtocolModel):
+    kind: Literal["tajiduo"] = "tajiduo"
     laohu_token: str = Field(description="老虎用户中心 token")
     laohu_user_id: str = Field(description="老虎用户中心 userId（数字字符串）")
 
 
+class WanmeiCredential(_ProtocolModel):
+    kind: Literal["wanmei"] = "wanmei"
+    logon: str = Field(description="完美世界登录凭据")
+    role_id: str = Field(description="异环角色 ID")
+    role_name: str = Field(description="异环角色名")
+
+
+Credential = Annotated[LaohuCredential | WanmeiCredential, Field(discriminator="kind")]
+
+
 class _StatusModel(_ProtocolModel):
-    status: str = Field(description="pending / success / failed / expired / heartbeat")
+    status: Literal["pending", "success", "failed", "expired", "heartbeat"] = Field(description="登录会话状态")
     msg: str = Field(default="", description="给用户看的展示文案")
-    credential: _Credential | None = Field(default=None, description="终态为 success 时的凭据")
+    credential: Credential | None = Field(default=None, description="终态为 success 时的凭据")
+
+
+@dataclass(frozen=True, slots=True)
+class TransportResult:
+    status: Literal["success", "failed", "expired"]
+    msg: str
+    credential: Credential | None
 
 
 class LoginTransport(Protocol):
@@ -78,20 +86,18 @@ def _sign(parts: list[str]) -> str:
 
 
 def _to_result(payload: _StatusModel) -> TransportResult | None:
-    """终态才返回 TransportResult；pending / heartbeat 等中间态返回 None。"""
-    if payload.status not in {"success", "failed", "expired"}:
-        return None
-    cred = payload.credential
-    return TransportResult(
-        status=payload.status,
-        msg=payload.msg,
-        laohu_token=cred.laohu_token if cred else "",
-        laohu_user_id=cred.laohu_user_id if cred else "",
-    )
+    match payload.status:
+        case "success" | "failed" | "expired":
+            return TransportResult(
+                status=payload.status,
+                msg=payload.msg,
+                credential=payload.credential,
+            )
+        case _:
+            return None
 
 
 def _normalize_base_url(raw: str) -> str:
-    """与 `_login_page_url` 一致：没带 scheme 自动补 https；尾斜杠去掉。"""
     raw = raw.strip().rstrip("/")
     if not raw.startswith(("http://", "https://")):
         raw = f"https://{raw}"
@@ -128,9 +134,11 @@ class _Base:
             raise TransportError(f"外置登录服务网络错误 url={url}: {err!r}") from err
 
         if resp.status_code != 200:
-            raise TransportError(f"外置登录服务 start 返回 HTTP {resp.status_code} url={url}: {resp.text or '<empty>'}")
+            detail = resp.text
+            if detail == "":
+                detail = "<empty>"
+            raise TransportError(f"外置登录服务 start 返回 HTTP {resp.status_code} url={url}: {detail}")
 
-        # 登录页 URL 由 NTEUID 自己用 base_url 拼，nte-login 不再回传
         return f"{self.base_url}/nte/i/{auth}"
 
 

@@ -23,15 +23,20 @@ NTEUID/scoring/
 
 ## 我只想换个算法(使用者)
 
-以现有评分包 [NTE-score-yuye](https://github.com/lingweiliang2510579032/NTE-score-yuye) 为例:
+### 外置评分包列表
 
-1. 发送 `ntescorer增加 https://github.com/lingweiliang2510579032/NTE-score-yuye` 安装评分包。
+- [NTE-score-yuye](https://github.com/lingweiliang2510579032/NTE-score-yuye) — `scorer_id`: `yuye`
+- [NTE-score-JiaBaili](https://github.com/jiabaili-qwq/NTE-score-JiaBaili) — `scorer_id`: `JiaBaili`
+
+### 安装与切换
+
+1. 复制上方 `NTE-score-yuye` 的仓库地址,发送 `ntescorer增加 <Git 仓库地址>` 安装评分包。
 2. 重启 Bot,让 NTEUID 扫描并注册新安装的 Python 包。
 3. 发送 `ntescorer查看`,确认已注册算法中出现 `yuye`。
 4. 发送 `ntescorer设置 yuye` 切换算法。
 5. 发送 `nte刷新面板`,按新算法重新计算并写入分数。
 
-这里 `NTE-score-yuye` 是安装后的**包目录名**,用于 `ntescorer更新 NTE-score-yuye` 和 `ntescorer删除 NTE-score-yuye`;`yuye` 是包内注册的 **`scorer_id`**,用于 `ntescorer设置 yuye`。`ntescorer更新` 不带包名会更新全部 Git 安装的评分包。更新会强制对齐远端并丢弃评分包内的本地修改;如果更新包含 Python 代码,完成后还要重启 Bot。
+这里 `NTE-score-yuye` 是安装后的**包目录名**,用于 `ntescorer更新 NTE-score-yuye` 和 `ntescorer删除 NTE-score-yuye`;`yuye` 是包内注册的 `scorer_id`,用于 `ntescorer设置 yuye`。`ntescorer更新` 不带包名会更新全部 Git 安装的评分包。更新会强制对齐远端并丢弃评分包内的本地修改;如果更新包含 Python 代码,完成后还要重启 Bot。
 
 角色面板、练度统计、评分排名、最强排行、AI 查询全部自动跟随,不用改任何代码。切换算法后旧算法的分数会自动退出榜单(见文末"榜单隔离"),用户重新「刷新面板」即可按新算法入榜。
 
@@ -167,7 +172,6 @@ def _plan(char_id: str) -> dict | None:
 
 ## 参考实现
 
-- [NTE-score-yuye](https://github.com/lingweiliang2510579032/NTE-score-yuye) — 可直接安装的外置评分包:包含独立 `scorer_id`、小数总分、自定义词条高亮颜色、评级徽章和随包评分数据,可作为完整仓库结构参考。
 - `providers/roll_value.py` — 内置词条折算:单词条得分 = 词条数值 ÷ 标准词条价值,按角色方案计核心主词条 + 推荐副词条。"写法二"数据组织的完整参考。它读的 `resource/scoring/*.json` 是私有数据,别的评分包不要依赖。
 - 想写伤害期望类算法,可以直接复用 `NTEUID/utils/damage`(乘区公式 `formula.py`、面板解析 `profiles.py`):对词条做数值微扰算边际伤害增益,增益即分数。
 

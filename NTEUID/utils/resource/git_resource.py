@@ -5,6 +5,7 @@ from pathlib import Path
 from gsuid_core.logger import logger
 
 from .RESOURCE_PATH import STATIC_RESOURCE_PATH
+from .scratch_items import load_scratch_items
 
 RESOURCE_URL = "https://cnb.cool/tyql688/NteMeta"
 META_PATH: Path = STATIC_RESOURCE_PATH
@@ -156,14 +157,13 @@ async def init_resources() -> None:
     logger.info("[NTEUID] 资源包已存在, 开始自动更新..." if is_repo else "[NTEUID] 未检测到资源包，开始自动安装...")
     result = await update_resources(is_force=is_repo, silent=False)
     if result["success"]:
-        # 覆盖首启时插件导入留下的空 dict
         from ..name_convert import reload_all
 
         reload_all()
+    await load_scratch_items(force=True)
 
 
 async def start_resources() -> None:
-    """启动资源管理：首次安装阻塞等待，后续更新走后台。"""
     if _is_git_repo():
         from ..background import create_background_task
 

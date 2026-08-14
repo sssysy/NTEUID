@@ -1,0 +1,112 @@
+{% extends "_card_base.html.j2" %}
+
+{% block css %}
+  .account-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #FFFFFF;
+  }
+  .badge {
+    font-size: 10px;
+    font-weight: bold;
+    color: #0C1B1E;
+    background-color: #35C8D6;
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+  .badge-wanmei {
+    color: #FFFFFF;
+    background-color: #F03E6B;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .role {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 7px;
+  }
+  .role-name {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .uid {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+  .role-empty {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 7px;
+  }
+  .meta-text {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .hint {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.35);
+    line-height: 1.7;
+    margin-top: 18px;
+  }
+{% endblock %}
+
+{% block head_right %}塔吉多 {{ accounts|length }} · 完美 {{ wanmei_accounts|length }}{% endblock %}
+
+{% block content -%}
+  {% if accounts %}
+  <div class="section">
+    <div class="tick"></div>
+    <div class="section-label">塔吉多账号</div>
+    <div class="section-count">{{ accounts|length }}</div>
+  </div>
+  {% for account in accounts %}
+  <div class="panel">
+    <div class="row">
+      <div class="account-name">{{ account.center_uid|e }}</div>
+      {% if account.current %}<div class="badge">当前</div>{% endif %}
+    </div>
+    {% if account.roles %}
+    {% for role in account.roles %}
+    <div class="role">
+      <div class="role-name">{{ role.game|e }} · {{ role.role_name|e }}</div>
+      <div class="uid">{{ role.uid|e }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="role-empty">角色信息暂未同步</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if wanmei_accounts %}
+  <div class="section">
+    <div class="tick tick-wanmei"></div>
+    <div class="section-label">完美账号</div>
+    <div class="section-count">{{ wanmei_accounts|length }}</div>
+  </div>
+  {% for account in wanmei_accounts %}
+  <div class="panel">
+    <div class="row">
+      <div class="account-name">{{ account.role_name|e }}</div>
+      {% if account.current %}<div class="badge badge-wanmei">当前</div>{% endif %}
+    </div>
+    <div class="role">
+      <div class="uid">{{ account.uid|e }}</div>
+      <div class="meta-text">{% if account.synced_at %}刮刮乐同步 {{ account.synced_at }}{% else %}刮刮乐未同步{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if accounts|length > 1 or wanmei_accounts|length > 1 %}
+  <div class="hint">
+    {%- if accounts|length > 1 %}<div>发送【{{ prefix }}切换】轮换塔吉多账号</div>{% endif -%}
+    {%- if wanmei_accounts|length > 1 %}<div>发送【{{ prefix }}完美切换】轮换完美账号，追加角色 UID 可精确切换</div>{% endif -%}
+  </div>
+  {% endif %}
+{% endblock %}

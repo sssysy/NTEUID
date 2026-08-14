@@ -12,12 +12,3 @@ requires-python = ">=3.11, <4.0"
 dependencies = [
     "pycryptodome>=3.20.0",
 ]
-
-[tool.pyright]
-include = ["NTEUID"]
-# scorers/ 是外置评分包(gitignore)，相对导入仅在运行时由 registry 挂载成立，静态检查排除
-exclude = ["NTEUID/scoring/scorers"]
-venvPath = "../../.."
-venv = ".venv"
-pythonVersion = "3.11"
-typeCheckingMode = "basic"

@@ -12,7 +12,6 @@ _proxy_provider: Callable[[], str] | None = None
 
 
 def set_proxy_provider(fn: Callable[[], str] | None) -> None:
-    """业务层启动时注入：避免 SDK 反向 import 配置层；fn 返回空字符串即直连。"""
     global _proxy_provider
     _proxy_provider = fn
 
@@ -29,6 +28,7 @@ class BaseSdkClient:
     USER_AGENT: ClassVar[str] = ""
     error_cls: ClassVar[type[SdkError]] = SdkError
     timeout: float = 20.0
+    cookie_jar: httpx.Cookies | None = None
 
     def _default_headers(self) -> dict[str, str]:
         return {"User-Agent": self.USER_AGENT}
@@ -45,12 +45,24 @@ class BaseSdkClient:
         return headers
 
     def _extract_data(self, payload: dict[str, Any], path: str) -> Any:
-        """默认按 `{code, msg, data}` 解析；子类如果字段名不同需自行覆盖。"""
         if payload.get("code") not in (0, "0"):
             raise self.error_cls(f"[{path}] {payload.get('msg', '')}", payload)
         return payload["data"] if "data" in payload and payload["data"] is not None else {}
 
-    async def _request(
+    def _client_options(self) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "timeout": self.timeout,
+            "trust_env": False,
+        }
+        if self.cookie_jar is not None:
+            options["cookies"] = self.cookie_jar
+        if _proxy_provider is not None:
+            proxy = _proxy_provider()
+            if proxy != "":
+                options["proxy"] = proxy
+        return options
+
+    async def _request_raw(
         self,
         path: str,
         *,
@@ -58,8 +70,7 @@ class BaseSdkClient:
         body: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> Any:
-        """JSON dict 响应走 `_extract_data`；异常响应、空响应、非 JSON 响应统一抛 SDK 错误。"""
+    ) -> httpx.Response:
         merged = dict(self._default_headers())
         if headers is not None:
             merged.update(headers)
@@ -74,22 +85,20 @@ class BaseSdkClient:
         )
 
         tag = self.__class__.__name__
-        logger.debug(f"[NTE-SDK] → {tag} {method} {self.BASE_URL}{path} query={query} body={body} headers={merged}")
+        url = path if path.startswith("https://") else f"{self.BASE_URL}{path}"
+        logger.debug(f"[NTE-SDK] → {tag} {method} {path} body={body} query={query} headers={merged}")
 
-        proxy: str | None = None
-        if _proxy_provider:
-            candidate = _proxy_provider()
-            if candidate:
-                proxy = candidate
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, proxy=proxy, trust_env=False) as client:
+            async with httpx.AsyncClient(**self._client_options()) as client:
                 resp = await client.request(
                     method,
-                    f"{self.BASE_URL}{path}",
+                    url,
                     headers=merged,
                     params=query,
                     data=body,
                 )
+                if self.cookie_jar is not None:
+                    self.cookie_jar.update(client.cookies)
         except httpx.HTTPError as err:
             logger.debug(f"[NTE-SDK] ✗ {tag} {method} {path} 网络错误: {err!r}")
             raise self.error_cls(f"[{path}] 网络请求失败") from err
@@ -101,6 +110,24 @@ class BaseSdkClient:
                 f"[{path}] HTTP {resp.status_code}",
                 {"status_code": resp.status_code, "text": resp.text},
             )
+        return resp
+
+    async def _request(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        resp = await self._request_raw(
+            path,
+            method=method,
+            body=body,
+            query=query,
+            headers=headers,
+        )
         if not resp.content:
             raise self.error_cls(f"[{path}] 响应为空", {"status_code": resp.status_code})
 

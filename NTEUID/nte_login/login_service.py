@@ -12,19 +12,25 @@ from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.cookie_manager.qrlogin import get_qrcode_base64
 
-from .transport import TransportError, build_transport
+from .transport import TransportError, WanmeiCredential, build_transport
 from ..utils.msgs import LoginMsg, send_nte_notify
 from ..utils.cache import TimedCache
 from ..utils.utils import get_public_ip
 from ..utils.session import is_auth_error
-from ..utils.database import NTEUser
-from ..utils.constants import LAOHU_APP_ID, LAOHU_APP_KEY
-from ..utils.sdk.laohu import LaohuClient, LaohuDevice, make_device_id
+from ..utils.database import NTEUser, NTEWanmeiUser
+from ..utils.sdk.laohu import LaohuDevice, make_device_id
 from ..utils.background import create_background_task
+from ..utils.sdk.wanmei import WanmeiIdClient, WanmeiKfClient
 from ..utils.sdk.tajiduo import TajiduoClient
 from ..utils.msgs.buttons import login_link_buttons
 from ..utils.game_registry import PRIMARY_GAME_ID, GAME_SIGN_SWITCHES
 from ..nte_config.nte_config import NTEConfig
+from ..utils.sdk.wanmei_model import (
+    WanmeiRole,
+    WanmeiError,
+    WanmeiAreaCode,
+    WanmeiLoginPage,
+)
 from ..utils.sdk.tajiduo_model import GameRoleList, TajiduoError, GameRecordCard, TajiduoSession
 from ..nte_role.character_cache import save_character_cache
 from ..utils.resource.RESOURCE_PATH import QR_PATH
@@ -35,42 +41,113 @@ EXTERNAL_PENDING: TimedCache = TimedCache(timeout=_MAX_LOGIN_TTL_S, maxsize=128)
 LOGIN_POLL_INTERVAL = 2.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LoginExchange:
     tajiduo: TajiduoClient
     roles: list[tuple[str, str, str]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LoginExchangeError:
     user_msg: str
 
 
-@dataclass
+@dataclass(slots=True, kw_only=True)
+class WanmeiLoginState:
+    client: WanmeiIdClient
+    login_page: WanmeiLoginPage
+    area_codes: list[WanmeiAreaCode]
+    roles: list[WanmeiRole] | None = None
+    logon: str | None = None
+
+
+@dataclass(slots=True, kw_only=True)
 class LoginState:
     user_id: str
     bot_id: str
     group_id: str | None
     device: LaohuDevice
-    status: str = "pending"  # pending | success | failed
-    ok: bool = False
-    msg: str = ""
+    wanmei: WanmeiLoginState | None = None
+    done: bool = False
     laohu_token: str = ""
     laohu_user_id: str = ""
 
 
-@dataclass(frozen=True)
-class LoginResult:
-    ok: bool
-    msg: str = ""
+async def prepare_wanmei_login(login_state: LoginState) -> WanmeiLoginState:
+    state = login_state.wanmei
+    if state is not None:
+        return state
+    client = WanmeiIdClient()
+    state = WanmeiLoginState(
+        client=client,
+        login_page=await client.login_page(),
+        area_codes=await client.area_codes(),
+    )
+    login_state.wanmei = state
+    return state
 
-    @classmethod
-    def fail(cls, msg: str) -> "LoginResult":
-        return cls(ok=False, msg=msg)
 
-    @classmethod
-    def success(cls, msg: str = "") -> "LoginResult":
-        return cls(ok=True, msg=msg)
+async def finish_wanmei_login(
+    *,
+    login_state: LoginState,
+    area_code_id: int,
+    phone: str,
+    sms_code: str,
+    cap_ticket: str,
+    sec_code: str,
+) -> list[WanmeiRole]:
+    state = login_state.wanmei
+    if state is None:
+        raise WanmeiError("完美登录链接已失效")
+    logon = await state.client.login_by_sms(
+        login_page=state.login_page,
+        area_code_id=area_code_id,
+        phone=phone,
+        sms_code=sms_code,
+        cap_ticket=cap_ticket,
+        sec_code=sec_code,
+    )
+    roles = await WanmeiKfClient(logon).roles()
+    logger.debug(
+        f"[NTE完美登录] user_id={login_state.user_id} 角色列表={[role.model_dump(by_alias=True) for role in roles]}"
+    )
+    if not roles:
+        raise WanmeiError("完美世界客服未返回异环角色")
+    if len(roles) == 1:
+        await _save_wanmei_login(login_state, roles[0], logon)
+        return roles
+    state.roles = roles
+    state.logon = logon
+    return roles
+
+
+async def select_wanmei_role(login_state: LoginState, role_id: str) -> None:
+    state = login_state.wanmei
+    if state is None or state.roles is None or state.logon is None:
+        raise WanmeiError("完美登录链接已失效")
+    role = next((item for item in state.roles if item.role_id == role_id), None)
+    if role is None:
+        raise WanmeiError("所选角色不在本次完美世界登录结果中")
+    await _save_wanmei_login(login_state, role, state.logon)
+
+
+async def _save_wanmei_login(
+    login_state: LoginState,
+    role: WanmeiRole,
+    logon: str,
+) -> None:
+    await NTEWanmeiUser.save_login(
+        user_id=login_state.user_id,
+        bot_id=login_state.bot_id,
+        uid=role.role_id,
+        role_name=role.role_name,
+        logon=logon,
+    )
+    logger.info(
+        f"[NTE完美登录] user_id={login_state.user_id} uid={role.role_id} role_name={role.role_name} 登录并落库完成"
+    )
+    login_state.wanmei = None
+    login_state.done = True
 
 
 async def _wait(auth_token: str) -> LoginState | None:
@@ -78,25 +155,15 @@ async def _wait(auth_token: str) -> LoginState | None:
     wait_s = NTEConfig.get_config("NTELoginTTL").data
     while waited < wait_s:
         state: LoginState | None = LOGIN_CACHE.get(auth_token)
-        if not state:
+        if state is None:
             return None
-        if state.status in {"success", "failed"}:
+        if state.done:
             LOGIN_CACHE.pop(auth_token)
             return state
         await asyncio.sleep(LOGIN_POLL_INTERVAL)
         waited += LOGIN_POLL_INTERVAL
     LOGIN_CACHE.pop(auth_token)
     return None
-
-
-def mark_login_failed(auth_token: str, msg: str) -> None:
-    state: LoginState | None = LOGIN_CACHE.get(auth_token)
-    if not state:
-        return
-    state.status = "failed"
-    state.ok = False
-    state.msg = msg
-    LOGIN_CACHE.set(auth_token, state)
 
 
 async def _exchange_and_persist(
@@ -247,7 +314,6 @@ def _collect_roles_from_record_cards(cards: list[GameRecordCard]) -> list[tuple[
 
 
 async def _collect_roles(tajiduo: TajiduoClient, game_id: str) -> list[tuple[str, str, str]]:
-    """get_bind_role + get_game_roles 双路合并，按 roleId 去重，主绑定排第一。"""
     collected: list[tuple[str, str, str]] = []
     seen: set[str] = set()
 
@@ -268,7 +334,6 @@ async def _collect_roles(tajiduo: TajiduoClient, game_id: str) -> list[tuple[str
 
 
 async def _ensure_bind_role(tajiduo: TajiduoClient, game_id: str, roles: GameRoleList) -> None:
-    """没设主绑定角色时自动绑第一个，顺手拿 bind_role 成就 70 金币。"""
     if roles.bind_role_id != 0 or not roles.roles:
         return
     first_role_id = roles.roles[0].uid
@@ -341,7 +406,8 @@ async def _send_login_link(bot: Bot, ev: Event, url: str) -> None:
 async def request_login(bot: Bot, ev: Event) -> None:
     transport_name = NTEConfig.get_config("NTELoginTransport").data.strip()
     if transport_name in {"", "local"}:
-        return await _request_login_internal(bot, ev)
+        await _request_login_internal(bot, ev)
+        return
     base_url = NTEConfig.get_config("NTELoginUrl").data.strip()
     if not base_url:
         logger.warning(f"[NTE登录] 接入方式为 {transport_name} 但 NTELoginUrl 未配置")
@@ -349,15 +415,16 @@ async def request_login(bot: Bot, ev: Event) -> None:
     await _request_login_external(bot, ev, base_url)
 
 
-async def _request_login_internal(bot: Bot, ev: Event) -> None:
+async def _request_login_internal(
+    bot: Bot,
+    ev: Event,
+) -> None:
     auth_token = _auth_token(ev.user_id)
     login_url = f"{await _login_page_url()}/nte/i/{auth_token}"
     await _send_login_link(bot, ev, login_url)
 
-    # 已有进行中的登录：复用同一个链接，不另开 wait 循环
-    if LOGIN_CACHE.get(auth_token):
+    if LOGIN_CACHE.get(auth_token) is not None:
         return
-
     LOGIN_CACHE.set(
         auth_token,
         LoginState(
@@ -370,9 +437,11 @@ async def _request_login_internal(bot: Bot, ev: Event) -> None:
 
     result = await _wait(auth_token)
     if result is None:
-        return await send_nte_notify(bot, ev, LoginMsg.timeout())
-    if not result.ok:
-        return await send_nte_notify(bot, ev, result.msg)
+        await send_nte_notify(bot, ev, LoginMsg.timeout())
+        return
+    if result.laohu_token == "":
+        await send_nte_notify(bot, ev, "完美登录成功")
+        return
     await login_by_laohu_token(
         bot,
         ev,
@@ -382,7 +451,11 @@ async def _request_login_internal(bot: Bot, ev: Event) -> None:
     )
 
 
-async def _request_login_external(bot: Bot, ev: Event, base_url: str) -> None:
+async def _request_login_external(
+    bot: Bot,
+    ev: Event,
+    base_url: str,
+) -> None:
     auth_token = _auth_token(ev.user_id)
     transport = build_transport(base_url)
 
@@ -414,12 +487,25 @@ async def _request_login_external(bot: Bot, ev: Event, base_url: str) -> None:
     if result is None or result.status == "expired":
         return await send_nte_notify(bot, ev, LoginMsg.timeout())
     if result.status != "success":
-        return await send_nte_notify(bot, ev, result.msg or LoginMsg.USER_CENTER_LOGIN_FAILED)
-    if not result.laohu_token or not result.laohu_user_id:
+        message = result.msg
+        if message == "":
+            message = LoginMsg.USER_CENTER_LOGIN_FAILED
+        return await send_nte_notify(bot, ev, message)
+    credential = result.credential
+    if credential is None:
         logger.warning(f"[NTE登录] 外置返回成功但凭据为空 user_id={ev.user_id}")
         return await send_nte_notify(bot, ev, LoginMsg.USER_CENTER_LOGIN_FAILED)
-
-    await login_by_laohu_token(bot, ev, result.laohu_token, result.laohu_user_id)
+    if isinstance(credential, WanmeiCredential):
+        await NTEWanmeiUser.save_login(
+            user_id=ev.user_id,
+            bot_id=ev.bot_id,
+            uid=credential.role_id,
+            role_name=credential.role_name,
+            logon=credential.logon,
+        )
+        await send_nte_notify(bot, ev, "完美登录成功")
+        return
+    await login_by_laohu_token(bot, ev, credential.laohu_token, credential.laohu_user_id)
 
 
 async def login_by_laohu_token(
@@ -430,7 +516,6 @@ async def login_by_laohu_token(
     *,
     dev_code: str | None = None,
 ) -> None:
-    """三条登录流的汇合点：原子 + 通知用户 + post-login 副作用。"""
     if dev_code is None:
         dev_code = make_device_id()
     outcome = await _exchange_and_persist(
@@ -447,34 +532,7 @@ async def login_by_laohu_token(
     await _post_login_actions(bot, ev, outcome)
 
 
-async def send_login_sms(auth_token: str, mobile: str) -> LoginResult:
-    state: LoginState | None = LOGIN_CACHE.get(auth_token)
-    if not state:
-        return LoginResult.fail(LoginMsg.session_expired())
-    await LaohuClient(LAOHU_APP_ID, LAOHU_APP_KEY, device=state.device).send_sms_code(mobile)
-    return LoginResult.success(msg=LoginMsg.SMS_SENT)
-
-
-async def perform_login(auth_token: str, mobile: str, code: str) -> LoginResult:
-    """只做短信验证，把老虎凭据塞进 state；塔吉多原子由命令段醒来后跑。"""
-    state: LoginState | None = LOGIN_CACHE.get(auth_token)
-    if not state:
-        return LoginResult.fail(LoginMsg.session_expired())
-
-    laohu = LaohuClient(LAOHU_APP_ID, LAOHU_APP_KEY, device=state.device)
-    account = await laohu.login_by_sms(mobile, code)
-
-    state.laohu_token = account.token
-    state.laohu_user_id = str(account.user_id)
-    state.status = "success"
-    state.ok = True
-    state.msg = LoginMsg.SMS_VERIFIED
-    LOGIN_CACHE.set(auth_token, state)
-    return LoginResult.success(msg=LoginMsg.SMS_VERIFIED)
-
-
 async def _post_login_actions(bot: Bot, ev: Event, outcome: LoginExchange) -> None:
-    """按 NTELoginAutoPanel 选前台出图刷或后台静默刷，两条分支都会落角色面板缓存。"""
     if NTEConfig.get_config("NTELoginAutoPanel").data:
         await _send_login_panel(bot, ev)
     else:
@@ -504,7 +562,6 @@ async def _auto_refresh_role_panel(tajiduo: TajiduoClient, roles: list[tuple[str
 
 
 async def refresh_all_user_tokens(user_id: str, bot_id: str) -> list[tuple[str, bool, str]]:
-    """按 center_uid 去重后逐账号续签，返回 [(center_uid, success, reason)]。"""
     users = await NTEUser.list_latest_per_account(user_id, bot_id)
     logger.info(f"[NTE刷新令牌] user_id={user_id} bot_id={bot_id} 取到 {len(users)} 个账号")
     results: list[tuple[str, bool, str]] = []

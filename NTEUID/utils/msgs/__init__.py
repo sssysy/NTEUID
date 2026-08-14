@@ -34,8 +34,6 @@ class LoginMsg:
     ACCESS_TOKEN_SHELL_SUCCESS = "登录成功，角色信息暂未同步"
     LINK_COPY = "请复制地址到浏览器打开"
     LINK_QR = "请扫描下方二维码获取登录地址，并复制地址到浏览器打开\n"
-    MOBILE_INVALID = "手机号格式错误"
-    CODE_INVALID = "验证码格式错误"
     SMS_SENT = "验证码已发送"
     SMS_SEND_FAILED = "验证码发送失败，请稍后再试"
     SMS_VERIFIED = "短信验证通过，请回到对话查看登录结果"
@@ -174,6 +172,44 @@ class RankMsg:
         return f"用法：{p}<角色名>bot排名，例如 {p}娜娜莉bot排名"
 
 
+class ScratchMsg:
+    PAGE_SUMMARY_MISMATCH = "刮刮乐分页汇总不一致"
+    REWARD_SUMMARY_MISMATCH = "刮刮乐返还与官方汇总不一致"
+    COST_SUMMARY_MISMATCH = "刮刮乐投入与官方汇总不一致"
+    NO_RECORDS = "暂无刮刮乐记录"
+    RANK_GROUP_ONLY = "刮刮乐排行只能在群里使用"
+    RANK_SCOPE_GROUP = "本群"
+    RANK_SCOPE_BOT = "BOT"
+    LOSS_TITLE = "亏损榜"
+    LOSS_SUBTITLE = "LOSS LEDGER"
+    LOSS_VALUE_LABEL = "净亏损"
+    LOSS_EMPTY = "该时段暂无亏损账号"
+    PROFIT_TITLE = "盈利榜"
+    PROFIT_SUBTITLE = "PROFIT LEDGER"
+    PROFIT_VALUE_LABEL = "净盈利"
+    PROFIT_EMPTY = "该时段暂无盈利账号"
+
+    @classmethod
+    def not_logged_in(cls) -> str:
+        return f"尚未完成完美登录，请先发送【{nte_prefix()}登录】"
+
+    @classmethod
+    def login_expired(cls) -> str:
+        return f"完美登录已失效，请重新发送【{nte_prefix()}登录】"
+
+    @classmethod
+    def saved_with_missing_resources(cls, missing: set[str]) -> str:
+        return f"刮刮乐流水已保存，资源未收录：{', '.join(sorted(missing))}"
+
+    @classmethod
+    def rank_empty(cls, scope: str, period: str) -> str:
+        return f"{scope}暂无{period}已同步的刮刮乐数据"
+
+    @classmethod
+    def resources_missing(cls, missing: set[str]) -> str:
+        return f"刮刮乐资源未收录：{', '.join(sorted(missing))}"
+
+
 class TeamMsg:
     LOAD_FAILED = "配队推荐暂时无法获取，请稍后再试"
     EMPTY = "当前没有可用的配队推荐"
@@ -189,6 +225,12 @@ class TeamMsg:
 class BindMsg:
     ONLY_ONE_ACCOUNT = "当前仅绑定了 1 个塔吉多账号，无需切换"
     TOKEN_EMPTY = "未找到可用的塔吉多凭证"
+    WANMEI_NOT_LOGGED_IN = "尚未完成完美登录"
+    WANMEI_ONLY_ONE_ACCOUNT = "当前仅绑定了 1 个完美账号，无需切换"
+
+    @classmethod
+    def wanmei_switch_done(cls, role_name: str, uid: str) -> str:
+        return f"已切换到完美账号 {role_name}（{uid}）"
 
     @classmethod
     def switch_done(cls, center_uid: str, role_name: str, uid: str) -> str:

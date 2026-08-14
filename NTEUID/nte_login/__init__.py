@@ -7,9 +7,9 @@ from gsuid_core.models import Event
 
 from . import login_router
 from ..utils.msgs import LoginMsg, CommonMsg, send_nte_notify
-from .bind_service import view_bindings, switch_binding, get_laohu_tokens, get_access_tokens
+from .bind_service import view_bindings, switch_binding, get_laohu_tokens, get_access_tokens, switch_wanmei_account
 from .login_service import request_login, login_by_laohu_token, login_by_access_token, refresh_all_user_tokens
-from ..utils.database import NTEUser, NTECharData, NTEGroupMember
+from ..utils.database import NTEUser, NTECharData, NTEWanmeiUser, NTEGroupMember
 from ..utils.game_registry import PRIMARY_GAME_ID
 
 _ = login_router  # 纯副作用 import：FastAPI 路由在模块加载时注册
@@ -82,6 +82,12 @@ async def nte_logout_all_cmd(bot: Bot, ev: Event):
     await send_nte_notify(bot, ev, LoginMsg.LOGOUT_ALL_DONE)
 
 
+@sv_nte_login.on_fullmatch(("完美登出", "完美退出", "完美退出登陆"), block=True)
+async def nte_wanmei_logout_cmd(bot: Bot, ev: Event) -> None:
+    await NTEWanmeiUser.delete_account(ev.user_id, ev.bot_id)
+    await send_nte_notify(bot, ev, "已退出完美登录并清除刮刮乐数据")
+
+
 @sv_nte_get_token.on_fullmatch(
     ("获取laohutoken", "获取laohuToken", "获取LAOHUTOKEN", "获取laohu令牌"),
     block=True,
@@ -105,6 +111,12 @@ async def nte_bind_cmd(bot: Bot, ev: Event):
     if "查看" in ev.command:
         return await view_bindings(bot, ev)
     return await switch_binding(bot, ev, target)
+
+
+@sv_nte_bind.on_command(("完美切换"), block=True)
+async def nte_wanmei_switch_cmd(bot: Bot, ev: Event) -> None:
+    target = re.sub(r'["\n\t ]+', "", ev.text.strip())
+    await switch_wanmei_account(bot, ev, target)
 
 
 @sv_nte_login.on_fullmatch(("刷新令牌", "刷新token", "续签"))

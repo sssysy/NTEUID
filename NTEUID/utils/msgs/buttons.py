@@ -8,12 +8,10 @@ ButtonRows = list[list[Button]]
 
 
 def cmd_btn(text: str, cmd: str, *, style: Literal[0, 1] = 1) -> Button:
-    """命令按钮（action=2）：点击发出『<前缀><cmd>』。前缀运行时现取，禁止冻结到模块常量/类属性。"""
     return Button(text, f"{nte_prefix()}{cmd}", action=2, style=style)
 
 
 def link_btn(text: str, url: str) -> Button:
-    """跳转按钮（action=0）。"""
     return Button(text, url, action=0)
 
 
@@ -22,18 +20,20 @@ def login_buttons() -> ButtonRows:
 
 
 def relogin_buttons() -> ButtonRows:
-    """令牌过期/登录失效场景：先续签，失败再重新登录。"""
     return [[cmd_btn("刷新令牌", "刷新令牌"), cmd_btn("重新登录", "登录")]]
 
 
 def login_link_buttons(url: str) -> ButtonRows:
-    """把登录链接做成跳转按钮（action=0）。url 须与文本链接一致（QQ 需走白名单域名才打得开）。"""
     return [[link_btn("点击登录", url)]]
 
 
-def switch_buttons() -> ButtonRows:
-    """无参『切换』= 账号轮换 A→B→C→A，一键换号。"""
-    return [[cmd_btn("切换账号", "切换")]]
+def binding_switch_buttons(tajiduo_count: int, wanmei_count: int) -> ButtonRows:
+    buttons: list[Button] = []
+    if tajiduo_count > 1:
+        buttons.append(cmd_btn("切换塔吉多", "切换"))
+    if wanmei_count > 1:
+        buttons.append(cmd_btn("切换完美", "完美切换"))
+    return [buttons] if buttons else []
 
 
 def help_buttons() -> ButtonRows:

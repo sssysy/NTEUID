@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import json
 from typing import Any, TypeVar, cast
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlmodel import Field, col, select
-from sqlalchemy import or_, and_, func, delete, tuple_, update
+from sqlalchemy import Text, Index, UniqueConstraint, or_, and_, func, delete, select as sa_select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gsuid_core.webconsole.mount_app import PageSchema, GsAdminModel, site
 from gsuid_core.utils.database.startup import exec_list
-from gsuid_core.utils.database.base_models import User, BaseIDModel, with_session
+from gsuid_core.utils.database.base_models import User, BaseModel, BaseIDModel, with_session
 
 from ..game_registry import PRIMARY_GAME_ID
 
@@ -33,10 +33,17 @@ exec_list.extend(
         # 排行按 (char_id, scorer) 过滤后走 score 排序；取代旧的纯 (char_id, score) 索引。
         "CREATE INDEX IF NOT EXISTS ix_ntechardata_char_scorer_score ON ntechardata (char_id, scorer, score DESC, uid, grade)",
         "DROP INDEX IF EXISTS ix_ntechardata_char_id_score_uid",
+        (
+            "CREATE INDEX IF NOT EXISTS ix_ntewanmeiscratchrecord_bot_time_account "
+            "ON ntewanmeiscratchrecord (bot_id, log_time, user_id, uid)"
+        ),
     ]
 )
 
 T_NTEUser = TypeVar("T_NTEUser", bound="NTEUser")
+T_NTEWanmeiUser = TypeVar("T_NTEWanmeiUser", bound="NTEWanmeiUser")
+T_NTEWanmeiScratchRecord = TypeVar("T_NTEWanmeiScratchRecord", bound="NTEWanmeiScratchRecord")
+T_NTEWanmeiGroupMember = TypeVar("T_NTEWanmeiGroupMember", bound="NTEWanmeiGroupMember")
 T_NTESignRecord = TypeVar("T_NTESignRecord", bound="NTESignRecord")
 T_NTEGroupMember = TypeVar("T_NTEGroupMember", bound="NTEGroupMember")
 T_NTECharData = TypeVar("T_NTECharData", bound="NTECharData")
@@ -598,6 +605,369 @@ class NTEUser(User, table=True):
         )
 
 
+class NTEWanmeiUser(BaseModel, table=True):
+    __table_args__: tuple[UniqueConstraint, dict[str, Any]] = (
+        UniqueConstraint("user_id", "bot_id", "uid", name="uq_ntewanmeiuser_user_bot_uid"),
+        {"extend_existing": True},
+    )
+    uid: str = Field(title="异环角色ID")
+    role_name: str = Field(title="异环角色名")
+    logon: str = Field(repr=False, sa_type=Text, title="完美账号登录凭据")
+    scratch_synced_at: datetime | None = Field(default=None, title="刮刮乐最近同步时间")
+    updated_at: datetime = Field(default_factory=datetime.now, title="更新时间")
+
+    @classmethod
+    @with_session
+    async def get_user(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+    ) -> T_NTEWanmeiUser | None:
+        result = await session.execute(
+            select(cls)
+            .where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+            )
+            .order_by(col(cls.updated_at).desc(), col(cls.id).desc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    @classmethod
+    @with_session
+    async def list_accounts(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+    ) -> list[T_NTEWanmeiUser]:
+        result = await session.execute(
+            select(cls)
+            .where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+            )
+            .order_by(col(cls.updated_at).desc(), col(cls.id).desc())
+        )
+        return list(result.scalars().all())
+
+    @classmethod
+    @with_session
+    async def cycle_account(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+    ) -> T_NTEWanmeiUser | None:
+        result = await session.execute(
+            select(cls)
+            .where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+            )
+            .order_by(col(cls.updated_at).desc(), col(cls.id).desc())
+        )
+        accounts = list(result.scalars().all())
+        if len(accounts) < 2:
+            return None
+
+        current = accounts[0]
+        next_account = accounts[1]
+        current.updated_at = accounts[-1].updated_at - timedelta(seconds=1)
+        next_account.updated_at = datetime.now()
+        return next_account
+
+    @classmethod
+    @with_session
+    async def switch_account(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+        uid: str,
+    ) -> T_NTEWanmeiUser | None:
+        result = await session.execute(
+            select(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.uid) == uid,
+            )
+        )
+        row = result.scalars().first()
+        if row is None:
+            return None
+        row.updated_at = datetime.now()
+        return row
+
+    @classmethod
+    @with_session
+    async def save_login(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        *,
+        user_id: str,
+        bot_id: str,
+        uid: str,
+        role_name: str,
+        logon: str,
+    ) -> None:
+        result = await session.execute(
+            select(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.uid) == uid,
+            )
+        )
+        row = result.scalars().first()
+        if row is None:
+            session.add(
+                cls(
+                    user_id=user_id,
+                    bot_id=bot_id,
+                    uid=uid,
+                    role_name=role_name,
+                    logon=logon,
+                )
+            )
+            return
+        row.role_name = role_name
+        row.logon = logon
+        row.updated_at = datetime.now()
+
+    @classmethod
+    @with_session
+    async def delete_account(
+        cls: type[T_NTEWanmeiUser],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+    ) -> None:
+        await session.execute(
+            delete(NTEWanmeiScratchRecord).where(
+                col(NTEWanmeiScratchRecord.user_id) == user_id,
+                col(NTEWanmeiScratchRecord.bot_id) == bot_id,
+            )
+        )
+        await session.execute(
+            delete(NTEWanmeiGroupMember).where(
+                col(NTEWanmeiGroupMember.user_id) == user_id,
+                col(NTEWanmeiGroupMember.bot_id) == bot_id,
+            )
+        )
+        await session.execute(
+            delete(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+            )
+        )
+
+
+class NTEWanmeiGroupMember(BaseModel, table=True):
+    __table_args__: tuple[UniqueConstraint, dict[str, Any]] = (
+        UniqueConstraint(
+            "group_id",
+            "bot_id",
+            "user_id",
+            name="uq_ntewanmeigroupmember_group_bot_user",
+        ),
+        {"extend_existing": True},
+    )
+    group_id: str = Field(index=True, title="群组ID")
+    uid: str = Field(index=True, title="异环角色ID")
+    role_name: str = Field(title="异环角色名")
+
+    @classmethod
+    @with_session
+    async def upsert_member(
+        cls: type[T_NTEWanmeiGroupMember],
+        session: AsyncSession,
+        *,
+        group_id: str,
+        bot_id: str,
+        user_id: str,
+        uid: str,
+        role_name: str,
+    ) -> None:
+        result = await session.execute(
+            select(cls).where(
+                col(cls.group_id) == group_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.user_id) == user_id,
+            )
+        )
+        row = result.scalars().first()
+        if row is None:
+            session.add(
+                cls(
+                    group_id=group_id,
+                    bot_id=bot_id,
+                    user_id=user_id,
+                    uid=uid,
+                    role_name=role_name,
+                )
+            )
+            return
+        row.uid = uid
+        row.role_name = role_name
+
+    @classmethod
+    @with_session
+    async def list_members(
+        cls: type[T_NTEWanmeiGroupMember],
+        session: AsyncSession,
+        group_id: str,
+        bot_id: str,
+    ) -> list[T_NTEWanmeiGroupMember]:
+        result = await session.execute(
+            select(cls).where(
+                col(cls.group_id) == group_id,
+                col(cls.bot_id) == bot_id,
+            )
+        )
+        return list(result.scalars().all())
+
+
+class NTEWanmeiScratchRecord(BaseModel, table=True):
+    __table_args__: tuple[Index, Index, dict[str, Any]] = (
+        Index(
+            "ix_ntewanmeiscratchrecord_account_time",
+            "user_id",
+            "bot_id",
+            "uid",
+            "log_time",
+        ),
+        Index(
+            "ix_ntewanmeiscratchrecord_bot_time_account",
+            "bot_id",
+            "log_time",
+            "user_id",
+            "uid",
+        ),
+        {"extend_existing": True},
+    )
+    uid: str = Field(title="异环角色ID")
+    log_time: datetime = Field(title="流水时间")
+    card_name: str = Field(title="读物名")
+    gain: int = Field(title="返还方斯")
+    extra: int = Field(title="附赠道具数", default=0)
+    award: str = Field(title="奖励原文", default="")
+
+    @classmethod
+    @with_session
+    async def replace_range(
+        cls: type[T_NTEWanmeiScratchRecord],
+        session: AsyncSession,
+        *,
+        user_id: str,
+        bot_id: str,
+        uid: str,
+        start_at: datetime,
+        end_at: datetime,
+        history_start_at: datetime,
+        records: list[T_NTEWanmeiScratchRecord],
+    ) -> None:
+        await session.execute(
+            delete(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.uid) == uid,
+                col(cls.log_time) >= start_at,
+                col(cls.log_time) <= end_at,
+            )
+        )
+        session.add_all(records)
+        await session.execute(
+            delete(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.uid) == uid,
+                col(cls.log_time) < history_start_at,
+            )
+        )
+        await session.execute(
+            update(NTEWanmeiUser)
+            .where(
+                col(NTEWanmeiUser.user_id) == user_id,
+                col(NTEWanmeiUser.bot_id) == bot_id,
+                col(NTEWanmeiUser.uid) == uid,
+            )
+            .values(
+                scratch_synced_at=end_at,
+            )
+        )
+
+    @classmethod
+    @with_session
+    async def list_for_account(
+        cls: type[T_NTEWanmeiScratchRecord],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+        uid: str,
+    ) -> list[T_NTEWanmeiScratchRecord]:
+        result = await session.execute(
+            select(cls)
+            .where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.uid) == uid,
+            )
+            .order_by(col(cls.log_time), col(cls.id))
+        )
+        return list(result.scalars().all())
+
+    @classmethod
+    @with_session
+    async def aggregate_for_rank(
+        cls: type[T_NTEWanmeiScratchRecord],
+        session: AsyncSession,
+        bot_id: str,
+        start_at: datetime,
+        end_at: datetime,
+        accounts: list[tuple[str, str]] | None,
+    ) -> list[tuple[str, str, str, str, int, int]]:
+        statement = (
+            sa_select(
+                col(cls.user_id),
+                col(cls.uid),
+                col(NTEWanmeiUser.role_name),
+                col(cls.card_name),
+                func.sum(col(cls.gain)),
+                func.count(col(cls.id)),
+            )
+            .join(
+                NTEWanmeiUser,
+                and_(
+                    col(NTEWanmeiUser.user_id) == col(cls.user_id),
+                    col(NTEWanmeiUser.bot_id) == col(cls.bot_id),
+                    col(NTEWanmeiUser.uid) == col(cls.uid),
+                ),
+            )
+            .where(
+                col(cls.bot_id) == bot_id,
+                col(cls.log_time) >= start_at,
+                col(cls.log_time) < end_at,
+            )
+            .group_by(
+                col(cls.user_id),
+                col(cls.uid),
+                col(NTEWanmeiUser.role_name),
+                col(cls.card_name),
+            )
+        )
+        if accounts is not None:
+            if not accounts:
+                return []
+            statement = statement.where(tuple_(col(cls.user_id), col(cls.uid)).in_(accounts))
+        result = await session.execute(statement)
+        return [
+            (user_id, uid, role_name, card_name, int(gain), int(count))
+            for user_id, uid, role_name, card_name, gain, count in result.all()
+        ]
+
+
 class NTESignRecord(BaseIDModel, table=True):
     """签到明细 + 当日幂等。
 
@@ -1000,6 +1370,27 @@ class NTEUserAdmin(GsAdminModel):
     pk_name = "id"
     page_schema = PageSchema(label="异环用户管理", icon="fa fa-users")  # type: ignore
     model = NTEUser
+
+
+@site.register_admin
+class NTEWanmeiUserAdmin(GsAdminModel):
+    pk_name = "id"
+    page_schema = PageSchema(label="异环完美账号", icon="fa fa-headset")  # type: ignore
+    model = NTEWanmeiUser
+
+
+@site.register_admin
+class NTEWanmeiScratchRecordAdmin(GsAdminModel):
+    pk_name = "id"
+    page_schema = PageSchema(label="异环刮刮乐流水", icon="fa fa-chart-line")  # type: ignore
+    model = NTEWanmeiScratchRecord
+
+
+@site.register_admin
+class NTEWanmeiGroupMemberAdmin(GsAdminModel):
+    pk_name = "id"
+    page_schema = PageSchema(label="异环刮刮乐群榜", icon="fa fa-users-line")  # type: ignore
+    model = NTEWanmeiGroupMember
 
 
 @site.register_admin

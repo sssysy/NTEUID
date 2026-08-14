@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    background-color: #16181D;
+    background-image: url('{{ bg }}');
+    background-size: cover;
+    font-family: NTEFont, sans-serif;
+    padding: 20px 20px 8px;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+  }
+  .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .header-text {
+    display: flex;
+    flex-direction: column;
+    margin-left: 12px;
+    flex: 1;
+  }
+  .title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #FFFFFF;
+  }
+  .subtitle {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 3px;
+  }
+  .head-right {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    text-align: right;
+  }
+  .accent {
+    height: 2px;
+    background-image: linear-gradient(90deg, #F03E6B, rgba(240, 62, 107, 0));
+    margin-top: 14px;
+  }
+  .section {
+    display: flex;
+    align-items: center;
+    margin-top: 18px;
+  }
+  .tick {
+    width: 3px;
+    height: 12px;
+    background-color: #35C8D6;
+    margin-right: 8px;
+  }
+  .tick-wanmei {
+    background-color: #F03E6B;
+  }
+  .section-label {
+    font-size: 13px;
+    font-weight: bold;
+    color: #FFFFFF;
+  }
+  .section-count {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: 6px;
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 8px;
+  }
+  .footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .title-img {
+    display: block;
+    width: 100%;
+  }
+  .footer-img {
+    width: 56%;
+  }
+  {% block css %}{% endblock %}
+</style>
+</head>
+<body>
+  {% if title_img %}
+  <img class="title-img" src="{{ title_img }}">
+  {%- else %}
+  <div class="header">
+    <img class="icon" src="{{ icon }}">
+    <div class="header-text">
+      <div class="title">{{ title }}</div>
+      <div class="subtitle">{{ subtitle }}</div>
+    </div>
+    <div class="head-right">{% block head_right %}{% endblock %}</div>
+  </div>
+  <div class="accent"></div>
+  {% endif %}
+  {%- block content %}{% endblock %}
+
+  <div class="footer">
+    <img class="footer-img" src="{{ footer }}">
+  </div>
+</body>
+</html>
