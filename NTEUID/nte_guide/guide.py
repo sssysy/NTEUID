@@ -14,7 +14,7 @@ from ..utils.msgs import GuideMsg, send_nte_notify
 from ..utils.msgs.buttons import guide_buttons
 from ..utils.name_convert import CHARS
 from ..nte_config.nte_config import NTEConfig
-from ..utils.resource.RESOURCE_PATH import GUIDE_PATH
+from ..utils.resource.RESOURCE_PATH import GUIDE_PATH, GUIDE_CUSTOM_PATH
 
 
 async def get_guide(bot: Bot, ev: Event, char_name: str) -> None:
@@ -24,12 +24,17 @@ async def get_guide(bot: Bot, ev: Event, char_name: str) -> None:
 
     logger.debug(f"[NTE攻略] 开始获取 {real_name} 图鉴")
     config = NTEConfig.get_config("NTEGuide").data
-    authors = [p.name for p in GUIDE_PATH.iterdir() if p.is_dir()] if "all" in config else config
+    guide_paths = (GUIDE_PATH, GUIDE_CUSTOM_PATH)
+    authors = (
+        list(dict.fromkeys(p.name for path in guide_paths for p in path.iterdir() if p.is_dir()))
+        if "all" in config
+        else config
+    )
 
     pattern = re.compile(re.escape(real_name), re.IGNORECASE)
     imgs: list[Any] = []
     for author in authors:
-        imgs += await _collect(GUIDE_PATH / author, pattern, author)
+        imgs += await _collect(tuple(path / author for path in guide_paths), pattern, author)
 
     if not imgs:
         return await send_nte_notify(bot, ev, GuideMsg.EMPTY.format(char_name=real_name))
@@ -40,18 +45,20 @@ async def get_guide(bot: Bot, ev: Event, char_name: str) -> None:
     await bot.send_option(parts, guide_buttons(real_name))
 
 
-async def _collect(guide_dir: Path, pattern: re.Pattern, author: str) -> list[Any]:
-    if not guide_dir.is_dir():
-        logger.warning(f"[NTE攻略] 攻略目录不存在：{guide_dir}")
+async def _collect(guide_dirs: tuple[Path, ...], pattern: re.Pattern, author: str) -> list[Any]:
+    existing_dirs = [guide_dir for guide_dir in guide_dirs if guide_dir.is_dir()]
+    if not existing_dirs:
+        logger.warning(f"[NTE攻略] 攻略目录不存在：{guide_dirs}")
         return []
     imgs: list[Any] = []
-    for file in guide_dir.iterdir():
-        if not pattern.search(file.name):
-            continue
-        try:
-            imgs.append(MessageSegment.image(await convert_img(file)))
-        except Exception as exc:
-            logger.warning(f"[NTE攻略] 图片读取失败 {file}: {exc}")
+    for guide_dir in existing_dirs:
+        for file in guide_dir.iterdir():
+            if not pattern.search(file.name):
+                continue
+            try:
+                imgs.append(MessageSegment.image(await convert_img(file)))
+            except Exception as exc:
+                logger.warning(f"[NTE攻略] 图片读取失败 {file}: {exc}")
     if imgs:
         imgs.insert(0, f"攻略作者：{author}")
     return imgs

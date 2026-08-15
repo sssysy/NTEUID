@@ -79,6 +79,7 @@ QR_PATH = OTHER_PATH / "qr"
 # 自定义
 CUSTOM_PATH = MAIN_PATH / "custom"
 ROLE_PANEL_PATH = CUSTOM_PATH / "panel"
+GUIDE_CUSTOM_PATH = CUSTOM_PATH / "guide"
 
 
 def init_dir():
@@ -118,6 +119,7 @@ def init_dir():
         ALIAS_PATH,
         CUSTOM_PATH,
         ROLE_PANEL_PATH,
+        GUIDE_CUSTOM_PATH,
     ]:
         path.mkdir(parents=True, exist_ok=True)
 

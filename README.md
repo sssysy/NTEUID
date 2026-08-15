@@ -29,6 +29,18 @@
 >
 > ✨ 如果需要添加其他异环相关功能欢迎在 issues 中提出 ✨
 
+## 丨自定义资源
+
+自定义资源保存在 gsuid_core 根目录的 `data/NTEUID/custom/`。
+
+- 自定义攻略图：`data/NTEUID/custom/guide/<攻略作者>/`
+  - 目录结构与资源仓的 `resource/guide/` 一致。
+  - 图片文件名需要包含标准角色名，例如 `早雾.webp`、`早雾_配装.webp`。
+  - `NTEGuide` 选择 `all` 时，会与资源仓攻略一起读取；同名作者的图片合并显示。
+- 自定义面板图：`data/NTEUID/custom/panel/<角色 ID>/`
+  - 推荐使用 `上传<角色名>面板图` 命令管理，插件会按角色 ID 分目录并保存为 WebP。
+  - 一个角色有多张面板图时，角色详情卡会随机选取一张。
+
 ## 丨使用限制
 
 > [!CAUTION]
