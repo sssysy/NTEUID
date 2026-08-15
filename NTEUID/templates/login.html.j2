@@ -273,46 +273,44 @@
       const wanmeiSendBtn = document.getElementById("wanmeiSendBtn");
       const wanmeiLoginBtn = document.getElementById("wanmeiLoginBtn");
 
-      let wanmeiReady = false;
-      let wanmeiLoading = false;
       let wanmeiCaptcha = null;
+      let wanmeiPrepare = null;
       let wanmeiCapTicket = "";
+      let wanmeiSecCode = "";
 
       function showWanmeiStatus(message, ok) {
         if (!wanmeiPanel.hidden) showStatus(message, ok);
       }
 
-      function initWanmeiCaptcha() {
+      function initWanmeiCaptcha(capTicket) {
         return new Promise((resolve) => {
-          const timeoutId = setTimeout(() => resolve(false), REQUEST_TIMEOUT_MS);
-          wanmeiCaptcha = new WanmeiCaptcha({ containerId: "captchaBox" });
-          wanmeiCaptcha.init({
+          const timeoutId = setTimeout(() => resolve(null), REQUEST_TIMEOUT_MS);
+          const captcha = new WanmeiCaptcha({ containerId: "captchaBox" });
+          captcha.init({
             appId: "20047",
-            capTicket: wanmeiCapTicket,
+            capTicket,
             bindBtn: "",
-            onRefresh: resetCaptcha,
+            callback: ({ secCode }) => {
+              if (captcha !== wanmeiCaptcha) return;
+              wanmeiSecCode = secCode;
+              setWanmeiFormEnabled(true);
+            },
+            onRefresh: () => {
+              if (captcha === wanmeiCaptcha) resetCaptcha();
+            },
             initCallback: (failed) => {
               clearTimeout(timeoutId);
-              resolve(!failed);
+              resolve(failed ? null : captcha);
             },
           });
         });
       }
 
-      function getCaptchaCode() {
-        if (!wanmeiReady || wanmeiCaptcha === null) {
-          showWanmeiStatus("请先完成官方智能验证", false);
-          return "";
-        }
-        const code = wanmeiCaptcha.getValidateResult();
-        if (!code) showWanmeiStatus("请先完成官方智能验证", false);
-        return code;
-      }
-
-      async function resetCaptcha() {
-        wanmeiReady = false;
+      async function resetCaptcha(message = "") {
         wanmeiCaptcha = null;
-        await prepareWanmei();
+        wanmeiSecCode = "";
+        const ready = await prepareWanmei();
+        if (ready && message) showWanmeiStatus(message, false);
       }
 
       function showWanmeiRoles(roles) {
@@ -346,11 +344,9 @@
         }
       }
 
-      async function prepareWanmei() {
-        if (wanmeiReady || wanmeiLoading) return;
-
-        wanmeiLoading = true;
+      async function loadWanmei() {
         wanmeiCaptcha = null;
+        wanmeiSecCode = "";
         setWanmeiFormEnabled(false);
         captchaBox.replaceChildren();
         showWanmeiStatus("正在加载官方智能验证…", true);
@@ -358,49 +354,56 @@
           const reply = await postJson("/nte/wanmei/prepare", { auth: AUTH });
           if (!reply.ok) {
             showWanmeiStatus(reply.message, false);
-            return;
+            return false;
           }
 
+          const selectedAreaCode = Number(wanmeiAreaCode.value || 1);
           wanmeiAreaCode.replaceChildren();
           for (const item of reply.areaCodes) {
             const option = document.createElement("option");
             option.value = item.areaCodeId;
             option.textContent = `${item.areaName} +${item.areaCode}`;
-            option.selected = item.areaCodeId === 1;
+            option.selected = item.areaCodeId === selectedAreaCode;
             wanmeiAreaCode.appendChild(option);
           }
-          wanmeiCapTicket = reply.capTicket;
-          if (!(await initWanmeiCaptcha())) {
-            wanmeiCaptcha = null;
+          const captcha = await initWanmeiCaptcha(reply.capTicket);
+          if (captcha === null) {
             captchaBox.replaceChildren();
             showWanmeiStatus("智能验证加载失败，请重新点击完美登录", false);
-            return;
+            return false;
           }
 
-          wanmeiReady = true;
+          wanmeiCapTicket = reply.capTicket;
+          wanmeiCaptcha = captcha;
           setWanmeiFormEnabled(true);
           showWanmeiStatus("", true);
+          return true;
         } catch {
           showWanmeiStatus("完美登录初始化失败，请重新点击完美登录", false);
-        } finally {
-          wanmeiLoading = false;
+          return false;
         }
+      }
+
+      function prepareWanmei() {
+        if (wanmeiCaptcha !== null) return Promise.resolve(true);
+        if (wanmeiPrepare !== null) return wanmeiPrepare;
+        wanmeiPrepare = loadWanmei().finally(() => { wanmeiPrepare = null; });
+        return wanmeiPrepare;
       }
 
       function setWanmeiFormEnabled(enabled) {
         wanmeiAreaCode.disabled = !enabled;
         wanmeiPhone.disabled = !enabled;
         wanmeiSmsCode.disabled = !enabled;
-        wanmeiSendBtn.disabled = !enabled || wanmeiSendBtn.dataset.cooldown === "1";
-        wanmeiLoginBtn.disabled = !enabled;
+        wanmeiSendBtn.disabled = !enabled || !wanmeiSecCode || wanmeiSendBtn.dataset.cooldown === "1";
+        wanmeiLoginBtn.disabled = !enabled || !wanmeiSecCode;
       }
 
       wanmeiSendBtn.addEventListener("click", async () => {
         const phone = wanmeiPhone.value.trim();
-        const secCode = getCaptchaCode();
-        if (!secCode) return;
+        const secCode = wanmeiSecCode;
 
-        wanmeiSendBtn.disabled = true;
+        setWanmeiFormEnabled(false);
         try {
           const reply = await postJson("/nte/wanmei/sendSmsCode", {
             auth: AUTH,
@@ -409,13 +412,14 @@
             capTicket: wanmeiCapTicket,
             secCode,
           });
-          showWanmeiStatus(reply.ok ? "短信验证码已发送" : reply.message, reply.ok);
           if (!reply.ok) {
-            await resetCaptcha();
+            await resetCaptcha(reply.message);
             return;
           }
 
           wanmeiSendBtn.dataset.cooldown = "1";
+          setWanmeiFormEnabled(true);
+          showWanmeiStatus("短信验证码已发送", true);
           let remain = 60;
           const timer = setInterval(() => {
             wanmeiSendBtn.textContent = `${remain}s`;
@@ -424,22 +428,20 @@
               clearInterval(timer);
               wanmeiSendBtn.textContent = "获取验证码";
               wanmeiSendBtn.dataset.cooldown = "0";
-              wanmeiSendBtn.disabled = !wanmeiReady;
+              wanmeiSendBtn.disabled = !wanmeiSecCode;
             }
           }, 1000);
         } catch {
-          wanmeiSendBtn.disabled = !wanmeiReady;
-          showWanmeiStatus("短信验证码发送失败，请检查网络后重试", false);
+          await resetCaptcha("短信验证码发送失败，请检查网络后重试");
         }
       });
 
       wanmeiLoginBtn.addEventListener("click", async () => {
         const phone = wanmeiPhone.value.trim();
         const smsCode = wanmeiSmsCode.value.trim();
-        const secCode = getCaptchaCode();
-        if (!secCode) return;
+        const secCode = wanmeiSecCode;
 
-        wanmeiLoginBtn.disabled = true;
+        setWanmeiFormEnabled(false);
         wanmeiLoginBtn.textContent = "登录中";
         try {
           const reply = await postJson("/nte/wanmei/login", {
@@ -458,11 +460,9 @@
             finishLogin();
             return;
           }
-          showWanmeiStatus(reply.message, false);
-          await resetCaptcha();
+          await resetCaptcha(reply.message);
         } catch {
-          wanmeiLoginBtn.disabled = !wanmeiReady;
-          showWanmeiStatus("登录请求失败，请检查网络后重试", false);
+          await resetCaptcha("登录请求失败，请检查网络后重试");
         } finally {
           wanmeiLoginBtn.textContent = "登录";
         }
@@ -476,11 +476,11 @@
         document.getElementById("wanmeiTab").setAttribute("aria-selected", String(!showTajiduo));
         showStatus("", true);
         if (showTajiduo) return;
-        if (wanmeiLoading) {
+        if (wanmeiPrepare !== null) {
           showStatus("正在加载官方智能验证…", true);
           return;
         }
-        if (!wanmeiReady) prepareWanmei();
+        if (wanmeiCaptcha === null) prepareWanmei();
       }
 
       for (const button of document.querySelectorAll("[data-mode]")) {
