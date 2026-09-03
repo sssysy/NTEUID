@@ -39,6 +39,20 @@ def damage_bonus_multiplier(panel: PanelStats, bundle: BuffBundle) -> float:
     return 1.0 + panel.general_dmg + panel.element_dmg + bundle.dmg_pct
 
 
+def final_damage_multiplier(bundle: BuffBundle) -> float:
+    """最终伤害区独立于普通增伤区。"""
+    return 1.0 + bundle.final_dmg_pct
+
+
+def effective_scale_value(panel: PanelStats, bundle: BuffBundle, scale: ScaleStat) -> float:
+    """面板终值加战斗内百分比增量；百分比只乘资源白值。"""
+    if scale is ScaleStat.DEF:
+        return panel.defense + panel.base_defense * bundle.def_pct
+    if scale is ScaleStat.HP:
+        return panel.hpmax + panel.base_hpmax * bundle.hp_pct
+    return panel.atk + panel.base_atk * bundle.atk_pct
+
+
 def compute_segment(
     *,
     name: str,
@@ -50,24 +64,27 @@ def compute_segment(
     bundle: BuffBundle,
 ) -> SegmentDamage:
     """按完整乘区公式结算单个倍率条目的非暴 / 暴击 / 期望伤害。"""
-    scale_value = panel.scale_value(scale)
-    if scale is ScaleStat.ATK:
-        # 攻击=白值×(1+攻%)+固定值，故外部 +Δ% 的精确增量=白值×Δ（不是面板×Δ）。
-        # 面板里已聚合的结构化攻%不动；只把外部 bundle.atk_pct 按白值加到攻击力上。
-        scale_value = panel.atk + panel.base_atk * bundle.atk_pct
+    scale_value = effective_scale_value(panel, bundle, scale)
     base = scale_value * pct / 100.0 + flat
 
     dmg_bonus = damage_bonus_multiplier(panel, bundle)
+    final_dmg = final_damage_multiplier(bundle)
     def_mult = defense_multiplier(panel.level, enemy, bundle.def_ignore)
     res_mult = resistance_multiplier(enemy, bundle.res_ignore)
     expected_crit, full_crit = crit_multipliers(panel.crit_rate + bundle.crit_rate, panel.crit_dmg + bundle.crit_dmg)
 
-    non_crit = base * dmg_bonus * def_mult * res_mult
+    non_crit = base * dmg_bonus * final_dmg * def_mult * res_mult
     return SegmentDamage(
         name=name,
         pct=pct,
         scale=scale,
+        scale_value=scale_value,
         non_crit=non_crit,
         crit=non_crit * full_crit,
         expected=non_crit * expected_crit,
+        dmg_bonus_mult=dmg_bonus,
+        final_dmg_mult=final_dmg,
+        crit_expected_mult=expected_crit,
+        def_mult=def_mult,
+        res_mult=res_mult,
     )

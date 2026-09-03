@@ -30,8 +30,9 @@ from ..utils.resource.cdn import (
     get_char_city_skill_img,
     get_char_suit_drive_img,
 )
-from ..utils.damage.models import ScaleStat, CharacterDamage
-from ..utils.damage.profiles import build_member_damage
+from ..utils.damage.models import ScaleStat, DamageEstimate, DamageScenario
+from ..nte_config.nte_config import NTEConfig
+from ..utils.damage.profiles import has_damage_panel, build_member_damage
 from ..utils.damage.settings import base_enemy
 from ..utils.fonts.nte_fonts import nte_font_origin
 from ..utils.sdk.tajiduo_model import (
@@ -343,95 +344,174 @@ async def _draw_drive(
             cursor += 49
 
 
-def _compute_damage(character: CharacterDetail) -> CharacterDamage | None:
-    """按配置敌人等级算单角色面板伤害（含自身条件增益满覆盖）；异常就跳过伤害区块，不连累整张卡。"""
-    try:
-        scan = scan_character_buffs(character)
-        def_reduction, res_reduction = enemy_mods(scan.enemy_debuffs)
-        enemy = base_enemy(def_reduction=def_reduction, res_reduction=res_reduction)
-        damage, _ = build_member_damage(character, enemy, [*scan.team_buffs, *scan.self_buffs])
-    except (KeyError, ValueError) as error:
-        logger.debug(f"[NTE伤害] 跳过面板伤害 char={character.id}: {error!r}")
+def _compute_damage(character: CharacterDetail) -> DamageEstimate | None:
+    """分别计算静态面板基线与全条件假设，动态边界不再混成单一结果。"""
+    if not has_damage_panel(character):
+        logger.debug(f"[NTE伤害] 跳过不完整面板 char={character.id}")
         return None
-    return damage if damage.abilities else None
+    scan = scan_character_buffs(character)
+    owner_buffs = [buff for buff in (*scan.team_buffs, *scan.self_buffs) if buff.applies_to_owner]
+    enemy_level = max(1, int(NTEConfig.get_config("NTEDamageEnemyLevel").data))
+    enemy_resist = max(-1.0, min(1.0, float(NTEConfig.get_config("NTEDamageEnemyResistance").data) / 100.0))
+
+    base_def, base_res = enemy_mods(scan.enemy_debuffs, DamageScenario.BASELINE)
+    baseline_enemy = base_enemy(
+        level=enemy_level,
+        resist=enemy_resist,
+        def_reduction=base_def,
+        res_reduction=base_res,
+    )
+    baseline, _ = build_member_damage(character, baseline_enemy, owner_buffs, DamageScenario.BASELINE)
+
+    full_def, full_res = enemy_mods(scan.enemy_debuffs, DamageScenario.FULL_TRIGGER)
+    full_enemy = base_enemy(
+        level=enemy_level,
+        resist=enemy_resist,
+        def_reduction=full_def,
+        res_reduction=full_res,
+    )
+    full_trigger, _ = build_member_damage(character, full_enemy, owner_buffs, DamageScenario.FULL_TRIGGER)
+    if not baseline.abilities:
+        return None
+    conditional_effects = sum(buff.conditional for buff in owner_buffs) + sum(
+        debuff.conditional for debuff in scan.enemy_debuffs
+    )
+    single_proc_effects = sum(buff.conditional and buff.stacked and buff.peak_value is None for buff in owner_buffs)
+    return DamageEstimate(
+        baseline=baseline,
+        full_trigger=full_trigger,
+        conditional_effects=conditional_effects,
+        single_proc_effects=single_proc_effects,
+        unparsed_effects=len(scan.unparsed),
+        orphan_effects=len(scan.orphans),
+    )
 
 
-def _damage_section_height(damage: CharacterDamage) -> int:
-    height = 76 + 116 + 36  # 标题栏 + 乘区拆解条 + 列头
-    for ability in damage.abilities:
+def _damage_section_height(damage: DamageEstimate) -> int:
+    height = 76 + 88 + 40 + GAP + 36
+    for ability in damage.baseline.abilities:
         height += 54 + len(ability.segments) * 40 + 12
     return height
+
+
+def _format_damage_range(baseline: float, full_trigger: float) -> str:
+    left = f"{baseline:,.0f}"
+    right = f"{full_trigger:,.0f}"
+    return left if left == right else f"{left}→{right}"
+
+
+def _format_pct(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".") + "%"
+
+
+def _format_pct_range(baseline: float, full_trigger: float) -> str:
+    left = _format_pct(baseline)
+    right = _format_pct(full_trigger)
+    return left if left == right else f"{left}→{right}"
+
+
+def _format_multiplier_range(baseline: float, full_trigger: float) -> str:
+    left = f"×{baseline:.2f}"
+    right = f"×{full_trigger:.2f}"
+    return left if left == right else f"{left}→{right}"
 
 
 def _draw_damage(
     canvas: Image.Image,
     draw: ImageDraw.ImageDraw,
     top: int,
-    damage: CharacterDamage,
+    damage: DamageEstimate,
     accent: tuple[int, int, int],
 ) -> None:
     drawer = SmoothDrawer()
     x0, x1 = 20, 1080
     col_pct, col_exp, col_crit = 560, 824, 1060
+    baseline = damage.baseline
+    full_trigger = damage.full_trigger
 
     drawer.rounded_rectangle((x0, top, x1, top + 64), 16, fill=(*accent, 235), target=canvas)
-    draw.text((x0 + 28, top + 32), "伤害测算", font=nte_font_origin(34), fill=COLOR_WHITE, anchor="lm")
+    draw.text((x0 + 28, top + 32), "社区公式·直伤估算", font=nte_font_origin(32), fill=COLOR_WHITE, anchor="lm")
     draw.text(
         (x1 - 24, top + 32),
-        f"对 {damage.context.enemy.level} 级敌人 · 直伤",
+        f"Lv{baseline.context.enemy.level} · 抗性 {baseline.context.enemy.resist:.0%}",
         font=nte_font_origin(22),
         fill=COLOR_WHITE,
         anchor="rm",
     )
 
     y = top + 76
-    ctx = damage.context
     drawer.rounded_rectangle((x0, y, x1, y + 88), 16, fill=(28, 32, 44, 210), target=canvas)
+    base_ctx = baseline.context
+    full_ctx = full_trigger.context
     cells = (
-        ("总攻击力", f"{ctx.panel.atk:.0f}"),
-        ("增伤区", f"×{ctx.dmg_bonus_mult:.2f}"),
-        ("暴击期望", f"×{ctx.crit_expected_mult:.2f}"),
-        ("防御区", f"×{ctx.def_mult:.2f}"),
-        ("抗性区", f"×{ctx.res_mult:.2f}"),
+        ("攻击结算", _format_damage_range(base_ctx.effective_atk, full_ctx.effective_atk)),
+        ("全局增伤", _format_multiplier_range(base_ctx.dmg_bonus_mult, full_ctx.dmg_bonus_mult)),
+        ("全局最终", _format_multiplier_range(base_ctx.final_dmg_mult, full_ctx.final_dmg_mult)),
+        ("全局暴击", _format_multiplier_range(base_ctx.crit_expected_mult, full_ctx.crit_expected_mult)),
+        ("防御区", _format_multiplier_range(base_ctx.def_mult, full_ctx.def_mult)),
+        ("抗性区", _format_multiplier_range(base_ctx.res_mult, full_ctx.res_mult)),
     )
     cell_w = (x1 - x0) // len(cells)
     for index, (label, value) in enumerate(cells):
         cx = x0 + cell_w * index + cell_w // 2
         draw.text((cx, y + 30), label, font=nte_font_origin(22), fill=COLOR_SUBTEXT, anchor="mm")
-        draw.text((cx, y + 60), value, font=nte_font_origin(30), fill=COLOR_WHITE, anchor="mm")
+        draw.text((cx, y + 60), value, font=nte_font_origin(24), fill=COLOR_WHITE, anchor="mm")
 
-    y += 88 + GAP
+    note = "基线→条件态：条件同时成立；明示层数取上限，未知按1层"
+    draw.text((x0 + 20, y + 106), note, font=nte_font_origin(19), fill=COLOR_SUBTEXT, anchor="lm")
+    gaps = f"仅自身直伤/不含环合与逐跳取整 · 条件效果 {damage.conditional_effects} · 未解析 {damage.unparsed_effects}"
+    gaps += f" · 未计直伤 {damage.orphan_effects}"
+    if damage.single_proc_effects:
+        gaps += f" · 单次层数假设 {damage.single_proc_effects}"
+    draw.text((x1 - 20, y + 130), gaps, font=nte_font_origin(19), fill=COLOR_SUBTEXT, anchor="rm")
+
+    y += 88 + 40 + GAP
     draw.text((52, y + 18), "技能 / 倍率", font=nte_font_origin(22), fill=COLOR_SUBTEXT, anchor="lm")
-    draw.text((col_exp, y + 18), "期望", font=nte_font_origin(22), fill=COLOR_SUBTEXT, anchor="rm")
-    draw.text((col_crit, y + 18), "暴击", font=nte_font_origin(22), fill=COLOR_SUBTEXT, anchor="rm")
+    draw.text((col_exp, y + 18), "期望 基线→条件", font=nte_font_origin(20), fill=COLOR_SUBTEXT, anchor="rm")
+    draw.text((col_crit, y + 18), "暴击 基线→条件", font=nte_font_origin(20), fill=COLOR_SUBTEXT, anchor="rm")
     y += 36
 
-    for ability in damage.abilities:
+    for base_ability, full_ability in zip(baseline.abilities, full_trigger.abilities, strict=True):
         drawer.rounded_rectangle((x0, y, x1, y + 48), 12, fill=(*accent, 96), target=canvas)
         draw.text(
             (x0 + 20, y + 24),
-            f"{ability.type_name}·{ability.name}",
+            f"{base_ability.type_name}·{base_ability.name}",
             font=nte_font_origin(26),
             fill=COLOR_WHITE,
             anchor="lm",
         )
-        rotation_note = "  Σ多形态" if ability.combo_form_count > 1 else ""
         draw.text(
             (x1 - 20, y + 24),
-            f"Lv{ability.level}  循环期望 {ability.rotation_expected:,.0f}{rotation_note}",
+            f"Lv{base_ability.level} · {len(base_ability.segments)} 个倍率条目",
             font=nte_font_origin(22),
             fill=COLOR_WHITE,
             anchor="rm",
         )
         y += 54
-        for seg in ability.segments:
-            suffix = "" if seg.scale is ScaleStat.ATK else f"·{seg.scale.label}"
-            draw.text((52, y + 20), f"{seg.name}{suffix}", font=nte_font_origin(24), fill=COLOR_WHITE, anchor="lm")
-            draw.text((col_pct, y + 20), f"{seg.pct:.0f}%", font=nte_font_origin(24), fill=COLOR_SUBTEXT, anchor="rm")
+        for base_seg, full_seg in zip(base_ability.segments, full_ability.segments, strict=True):
+            suffix = "" if base_seg.scale is ScaleStat.ATK else f"·{base_seg.scale.label}"
+            draw.text((52, y + 20), f"{base_seg.name}{suffix}", font=nte_font_origin(24), fill=COLOR_WHITE, anchor="lm")
             draw.text(
-                (col_exp, y + 20), f"{seg.expected:,.0f}", font=nte_font_origin(26), fill=COLOR_WHITE, anchor="rm"
+                (col_pct, y + 20),
+                _format_pct_range(base_seg.pct, full_seg.pct),
+                font=nte_font_origin(22),
+                fill=COLOR_SUBTEXT,
+                anchor="rm",
             )
-            draw.text((col_crit, y + 20), f"{seg.crit:,.0f}", font=nte_font_origin(24), fill=CRIT_COLOR, anchor="rm")
+            draw.text(
+                (col_exp, y + 20),
+                _format_damage_range(base_seg.expected, full_seg.expected),
+                font=nte_font_origin(22),
+                fill=COLOR_WHITE,
+                anchor="rm",
+            )
+            draw.text(
+                (col_crit, y + 20),
+                _format_damage_range(base_seg.crit, full_seg.crit),
+                font=nte_font_origin(21),
+                fill=CRIT_COLOR,
+                anchor="rm",
+            )
             y += 40
         y += 12
 

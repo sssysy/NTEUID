@@ -7,6 +7,7 @@ from gsuid_core.utils.plugins_config.models import (
     GsBoolConfig,
     GsListConfig,
     GsTimeConfig,
+    GsFloatConfig,
     GsListStrConfig,
 )
 
@@ -163,6 +164,19 @@ CONFIG_DEFAULT: dict[str, GSC] = {
         "评分provider",
         "角色评分使用的评分算法 ID；内置 roll_value（词条折算），自定义 provider 注册后填其 scorer_id",
         "roll_value",
+    ),
+    "NTEDamageEnemyLevel": GsIntConfig(
+        "伤害测算敌人等级",
+        "角色卡直伤估算采用的敌人等级",
+        80,
+        max_value=200,
+    ),
+    "NTEDamageEnemyResistance": GsFloatConfig(
+        "伤害测算敌人抗性",
+        "角色卡直伤估算采用的属性抗性百分数；20 表示 20%",
+        20.0,
+        min_value=-100.0,
+        max_value=100.0,
     ),
     "NTEGuide": GsListStrConfig(
         "角色攻略图提供方",

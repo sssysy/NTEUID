@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from ..sdk.tajiduo_model import CharElement
 
-# —— 防御区等级常数（轨外之境真实公式：大世界敌人项=100，轨外之境=90，角色项恒 100）——
+# —— 当前社区公式采用的防御区等级常数 ——
 ENEMY_DEF_LEVEL_CONST = 90
 CHAR_DEF_LEVEL_CONST = 100
 
-# —— 写死的假设值（资源无对应数据，要改改这里一处即可，不进用户配置）——
-DEFAULT_ENEMY_LEVEL = 80  # 伤害假设的敌人等级（轨外之境基线）
-DEFAULT_ENEMY_RESIST = 0.2  # 敌人全属性抗性基线（真实敌人表实测：普遍 0.2，硬敌 0.28，弱点 0.16；无一为 0）
+# —— 稳定审计默认值；角色卡允许从插件配置覆盖 ——
+DEFAULT_ENEMY_LEVEL = 80
+DEFAULT_ENEMY_RESIST = 0.2
 
 # —— 角色元素 → 面板属性 id 后缀（取自真实面板 properties 的 id）——
 # 注意：魂(PSYCHE) 在面板里写作 "syche" 而非 "psyche"，按真实数据来。

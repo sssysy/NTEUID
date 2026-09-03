@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import Field, BaseModel, ConfigDict, BeforeValidator
 
-# 资源 JSON 里 stats / phases / abilities / effect 可能给 null；统一在模型层把 null 归一成空，业务层不再兜底。
+# 资源中的 null 在模型边界归一为空容器。
 _none_to_list = BeforeValidator(lambda value: [] if value is None else value)
 _none_to_dict = BeforeValidator(lambda value: {} if value is None else value)
 
@@ -32,10 +32,15 @@ class RawAbility(_Base):
     phases: Annotated[list[RawPhase], _none_to_list] = Field(default_factory=list)
 
 
+class RawCharacterStat(_Base):
+    id_stats: str = ""
+    values: Annotated[list[float], _none_to_list] = Field(default_factory=list)
+
+
 class RawEffect(_Base):
     name: str = ""
     desc: str = ""
-    awaken_num: int = 0  # 共鸣解锁所需的觉醒等级（共鸣1=3、共鸣2=6）；觉醒条目无此字段，缺省 0
+    awaken_num: int = 0
 
 
 class RawCharData(_Base):
@@ -48,9 +53,10 @@ class RawCharData(_Base):
     hp: int = 0
     atk: int = 0
     def_: int = Field(0, alias="def")
+    stats: Annotated[list[RawCharacterStat], _none_to_list] = Field(default_factory=list)
     abilities: Annotated[list[RawAbility], _none_to_list] = Field(default_factory=list)
-    awaken: Annotated[list[RawEffect], _none_to_list] = Field(default_factory=list)  # 按觉醒等级 1-6 顺序
-    resonance: Annotated[list[RawEffect], _none_to_list] = Field(default_factory=list)  # 混频共鸣，按 slev 解锁
+    awaken: Annotated[list[RawEffect], _none_to_list] = Field(default_factory=list)
+    resonance: Annotated[list[RawEffect], _none_to_list] = Field(default_factory=list)
 
 
 class RawForkEffect(_Base):

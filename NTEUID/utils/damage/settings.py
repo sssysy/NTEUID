@@ -3,14 +3,18 @@ from __future__ import annotations
 from .models import EnemyProfile
 from .constants import DEFAULT_ENEMY_LEVEL, DEFAULT_ENEMY_RESIST
 
-# 敌人等级 / 抗性写死在 constants（真实敌人表实测值）。
 
-
-def base_enemy(*, def_reduction: float = 0.0, res_reduction: float = 0.0) -> EnemyProfile:
-    """默认敌人（轨外之境 80 级、全抗 0.2 真实基线）；解析到的减防 / 减抗再填进来。"""
+def base_enemy(
+    *,
+    level: int = DEFAULT_ENEMY_LEVEL,
+    resist: float = DEFAULT_ENEMY_RESIST,
+    def_reduction: float = 0.0,
+    res_reduction: float = 0.0,
+) -> EnemyProfile:
+    """生成显式敌人假设；默认值只用于稳定审计，角色卡可从配置覆盖。"""
     return EnemyProfile(
-        level=DEFAULT_ENEMY_LEVEL,
-        resist=DEFAULT_ENEMY_RESIST,
+        level=level,
+        resist=resist,
         def_reduction=def_reduction,
         res_reduction=res_reduction,
     )

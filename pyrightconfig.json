@@ -1,5 +1,5 @@
 {
-  "include": ["NTEUID"],
+  "include": ["NTEUID", "tests"],
   "exclude": ["NTEUID/scoring/scorers"],
   "extraPaths": ["../../.."],
   "venvPath": "../../..",

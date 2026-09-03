@@ -4,17 +4,11 @@ import re
 
 # 增益作用域单一真源。
 #
-# 增伤区 = 1 + 通用伤害增强 + 伤害类型(元素/心灵)增强 + 伤害来源增强 + 其他 - 造成伤害降低。
-# 「伤害来源」即普通攻击 / 变轨技能 / 极轨终结 / 援护技 / 下落攻击 / 极限反击 / Buff / 弧盘 /
-# 被动 / 环合 / 无来源——这正是逐技能（per-skill）作用域的分类。来源限定的增伤只加到对应
-# 伤害段，不能折进全局增伤区（否则会被平摊到所有段 = 超算）。
+# 来源限定增伤只加到对应伤害段，不能折入全局增伤区。
 #
-# 真实数据里命中的限定增益几乎都是「极轨终结：奇零除尽」这种「类型：技能名」引号形式，而对应
-# 倍率段名只是「伤害倍率」——所以可靠的绑定落在 ability.type（整条 ultraskill 就是这个技能），
-# 而非 segment 段名子串。extract_scope 因此优先把引号里的类型词解析成 type:xxx。
+# 引号内的技能类型优先绑定 ability.type，其余名称绑定具体技能。
 
-# 来源关键词 → 引擎 ability.type。长词优先（按 key 长度倒序匹配），避免「极轨」「终结」抢在
-# 「极轨终结」前命中。
+# 长关键词优先，避免短词抢先命中。
 KEYWORD_TO_SCOPE: dict[str, str] = {
     "普通攻击": "type:melee",
     "普攻": "type:melee",
@@ -25,11 +19,10 @@ KEYWORD_TO_SCOPE: dict[str, str] = {
     "援护技": "type:qte",
     "援护": "type:qte",
 }
-# type 内细分的段名子串（melee 里的极限反击 / 下落 / 分支）。仅保留语义明确的安全词；真实数据
-# 目前没有段级限定增益，此处为前瞻扩展，靠「直接管辖伤害」的强信号触发，不会误吃全局增益。
+# 仅保留语义明确的段名关键词。
 SEGMENT_KEYWORDS: tuple[str, ...] = ("反击", "下落", "分支")
-# 伤害类型标签型增益：DoT / 附着 / 心灵伤害都没有对应倍率段，无法折算，诚实 surface 不入算。
-ORPHAN_KEYWORDS: tuple[str, ...] = ("附着物伤害", "附着伤害", "持续伤害", "心灵伤害")
+# 没有对应倍率段的伤害类型只报告，不折算。
+ORPHAN_KEYWORDS: tuple[str, ...] = ("附着物伤害", "附着伤害", "持续伤害", "心灵伤害", "倾陷伤害")
 # scope → 展示标签，供卡片/报告呈现作用域。
 SCOPE_TO_LABEL: dict[str, str] = {
     "type:melee": "普攻",
@@ -38,16 +31,24 @@ SCOPE_TO_LABEL: dict[str, str] = {
     "type:qte": "援护技",
 }
 
-# 限定词必须「直接管辖」伤害/暴击短语才算作用域，借此区分「释放『终结』后…」这类触发语
-# （增益其实是全局的，引号只是触发条件）。
-_DMG_TAIL = r"(?:所?造成的?|的)?(?:[光灵咒暗魂相]属性)?(?:异能)?(?:暴击伤害|暴击率|暴伤|伤害)"
+# 只有直接管辖伤害短语的名称才构成作用域。
+_DMG_TAIL = (
+    r"(?:所?造成的?|的)?(?:额外)?(?:[光灵咒暗魂相]属性)?(?:异能)?(?:最终)?"
+    r"(?:暴击伤害|暴击率|暴伤|伤害)"
+)
 _QUOTE_SCOPE_RE = re.compile(r"[「『]([^」』]+)[」』]" + _DMG_TAIL)
 _KW_ALT = "|".join(sorted(KEYWORD_TO_SCOPE, key=len, reverse=True))
 _BARE_SCOPE_RE = re.compile(r"(" + _KW_ALT + r")" + _DMG_TAIL)
 _SEG_SCOPE_RE = re.compile(r"(" + "|".join(SEGMENT_KEYWORDS) + r")" + _DMG_TAIL)
 
-# 多作用域：「『普攻』和『极限反击』造成伤害+X%」——多个来源由 和/与/或/、 并列、共管同一个伤害短语。
-# 一个来源 = 引号名 或 裸来源关键词；并列组须 ≥2 个来源(含连接词)，紧贴 _DMG_TAIL，避免吃到触发语。
+# 条件目标可夹在来源与伤害短语之间，但不能跨子句。
+_QUOTE_TARGET_SCOPE_RE = re.compile(r"[「『]([^」』]+)[」』][^，。；]{0,16}?" + _DMG_TAIL)
+_QUOTE_VALUE_SCOPE_RE = re.compile(
+    r"[「『]([^」』]+)[」』][^，。；]{0,10}?"
+    r"(?:额外)?(?:获得|提升|提高|增加)\s*\d+(?:\.\d+)?%\s*(?:暴击伤害|暴击率|增伤)"
+)
+
+# 并列来源须共同紧邻同一个伤害短语。
 _CONNECTOR = r"(?:和|与|、|及|以及|或)"
 _SOURCE = r"(?:[「『][^」』]+[」』]|" + _KW_ALT + r")"
 _MULTI_SCOPE_RE = re.compile(r"(" + _SOURCE + r"(?:" + _CONNECTOR + _SOURCE + r")+)" + _DMG_TAIL)
@@ -80,7 +81,7 @@ def extract_scope(sentence: str) -> str:
             scope = _classify_quote(quote) if quote else KEYWORD_TO_SCOPE[bare]
             if scope and scope not in scopes:
                 scopes.append(scope)
-        if len(scopes) >= 2:  # 真并列多作用域；只解析出 1 个则退回单作用域逻辑
+        if len(scopes) >= 2:
             return "|".join(scopes)
     quoted = _QUOTE_SCOPE_RE.search(sentence)
     if quoted is not None:
@@ -89,6 +90,43 @@ def extract_scope(sentence: str) -> str:
     if bare is not None:
         return KEYWORD_TO_SCOPE[bare.group(1)]
     segment = _SEG_SCOPE_RE.search(sentence)
+    if segment is not None:
+        return f"segment:{segment.group(1)}"
+    return ""
+
+
+def extract_scope_at(sentence: str, start: int, end: int) -> str:
+    """识别直接管辖指定增益短语的作用域，避免同句前后效果串扰。"""
+
+    def overlaps(match: re.Match[str]) -> bool:
+        return match.start() < end and start < match.end()
+
+    multi = next((match for match in _MULTI_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
+    if multi is not None:
+        scopes: list[str] = []
+        for quote, bare in _SOURCE_RE.findall(multi.group(1)):
+            scope = _classify_quote(quote) if quote else KEYWORD_TO_SCOPE[bare]
+            if scope and scope not in scopes:
+                scopes.append(scope)
+        if len(scopes) >= 2:
+            return "|".join(scopes)
+
+    quoted = next((match for match in _QUOTE_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
+    if quoted is not None:
+        return _classify_quote(quoted.group(1))
+
+    targeted = next((match for match in _QUOTE_TARGET_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
+    if targeted is not None and any(keyword in targeted.group(1) for keyword in KEYWORD_TO_SCOPE):
+        return _classify_quote(targeted.group(1))
+
+    valued = next((match for match in _QUOTE_VALUE_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
+    if valued is not None:
+        return _classify_quote(valued.group(1))
+
+    bare = next((match for match in _BARE_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
+    if bare is not None:
+        return KEYWORD_TO_SCOPE[bare.group(1)]
+    segment = next((match for match in _SEG_SCOPE_RE.finditer(sentence) if overlaps(match)), None)
     if segment is not None:
         return f"segment:{segment.group(1)}"
     return ""
@@ -104,7 +142,8 @@ def scope_matches(scope: str, ability_type: str, ability_name: str, segment_name
     if scope.startswith("type:"):
         return ability_type == scope[len("type:") :]
     if scope.startswith("ability:"):
-        return scope[len("ability:") :] in ability_name
+        name = scope[len("ability:") :]
+        return name in ability_name or name in segment_name
     if scope.startswith("segment:"):
         return scope[len("segment:") :] in segment_name
     return False
