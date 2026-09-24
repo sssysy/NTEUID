@@ -60,7 +60,7 @@ class RawCharData(_Base):
 
 
 class RawForkEffect(_Base):
-    description: str = ""
+    description: str | None = ""
 
 
 class RawForkData(_Base):

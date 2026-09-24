@@ -102,7 +102,13 @@ def _rewards(value: object) -> dict[str, list[str]]:
     return result
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环官方活动日历/奖励/起止时间 JSON"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_activity() -> str:
     """查询异环游戏活动日历。用户说"活动、活动日历、有什么活动、活动什么时候结束"时调用；
     按 UTC+8 当前时间分组，返回清洗后的中文 JSON。不需要用户账号。"""
@@ -175,7 +181,13 @@ async def everness_activity() -> str:
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环角色技能/觉醒/共鸣/CV/属性资料 JSON"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_character(name: str) -> str:
     """查询异环角色详情、技能描述、觉醒、共鸣、生日、阵营、CV、基础属性。用户说"角色详情、角色背景、技能描述、觉醒、共鸣、生日、CV"时调用；
     注意：角色攻略/配装推荐不在这里，用 nte_guide。
@@ -247,7 +259,13 @@ async def everness_character(name: str) -> str:
     )
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环驱动块/模块/套装效果 JSON"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_drive_block(name: str) -> str:
     """查询异环驱动块、模块、core、套装效果。用户说"驱动块、模块、Module、core、主属性、副属性、套装效果"时调用；
     name 填驱动块名称，返回中文 JSON。不需要用户账号。"""
@@ -277,7 +295,13 @@ async def everness_drive_block(name: str) -> str:
     )
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环弧盘效果/属性/材料 JSON"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_arc(name: str) -> str:
     """查询异环弧盘效果、属性、材料。用户说"弧盘、弧盘效果、弧盘材料、弧盘来源"时调用；
     name 填弧盘名或别名，返回中文 JSON。不需要用户账号。"""
@@ -310,7 +334,13 @@ async def everness_arc(name: str) -> str:
     )
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环异能环合/元素反应 JSON"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_esper_cycle(name: str = "") -> str:
     """查询异环异能环合、元素组合、元素反应。用户说"异能环合、元素组合、元素反应、延滞、创生、覆纹、黯星、浊燃、浸染"时调用；
     name 填环合名或元素名，留空返回全部，返回中文 JSON。不需要用户账号。"""
@@ -344,7 +374,13 @@ async def everness_esper_cycle(name: str = "") -> str:
     return f"未在 Everness 找到异能环合：{name}"
 
 
-@ai_tools(category="common", context_tags=["异环", "Everness"], capability_domain="异环资料库", timeout=30.0)
+@ai_tools(
+    covers=["异环资料库模糊搜索：角色/弧盘/驱动块/环合/道具/活动"],
+    category="common",
+    context_tags=["异环", "Everness"],
+    capability_domain="异环资料库",
+    timeout=30.0,
+)
 async def everness_search(keyword: str, category: str = "", limit: int = 20) -> str:
     """模糊搜索异环游戏资料。用户说"搜一下、查一下、不知道叫什么"时调用；
     keyword 填关键词；category 可填 角色、弧盘、驱动块、异能环合、道具、活动，留空搜索全部分类。

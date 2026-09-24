@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from gsuid_core.webconsole.mount_app import PageSchema, GsAdminModel, site
 from gsuid_core.utils.database.startup import exec_list
-from gsuid_core.utils.database.base_models import User, BaseModel, BaseIDModel, with_session
+from gsuid_core.utils.database.base_models import (
+    User,
+    BaseModel,
+    BaseIDModel,
+    with_session,
+    with_read_session,
+)
 
 from ..game_registry import PRIMARY_GAME_ID
 
@@ -988,7 +994,7 @@ class NTESignRecord(BaseIDModel, table=True):
     payload: str = Field(default="", title="签到返回原文(JSON)")
 
     @classmethod
-    @with_session
+    @with_read_session
     async def is_signed(
         cls: type[T_NTESignRecord],
         session: AsyncSession,
