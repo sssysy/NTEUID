@@ -248,6 +248,7 @@ class ScorerMsg:
     SET_USAGE = "用法：scorer设置 <scorer_id>"
     NOT_PACKAGE = "安装失败：仓库根目录没有 __init__.py"
     NO_PACK = "没有可更新的评分包"
+    INVALID_NAME = "包名必须是评分包目录名，不支持路径或符号链接"
 
     @classmethod
     def unknown_id(cls, scorer_id: str, known: list[str]) -> str:
