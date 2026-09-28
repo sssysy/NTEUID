@@ -33,6 +33,12 @@ except ImportError:
     )
 
 CONFIG_DEFAULT: dict[str, GSC] = {
+    "NTEAutoUpdateMinutes": GsIntConfig(
+        "资源与评分包自动更新间隔（分钟）",
+        "重启后生效；小于等于 0 时使用 60 分钟，冲突时跳过",
+        60,
+        max_value=10080,
+    ),
     "NTEAnnIds": GsListConfig(
         "推送公告ID",
         "异环公告推送ID列表",
