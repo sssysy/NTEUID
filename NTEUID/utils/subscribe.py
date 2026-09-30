@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from gsuid_core.logger import logger
 from gsuid_core.models import Event, Message
 from gsuid_core.subscribe import gs_subscribe
@@ -56,13 +58,20 @@ async def list_subscribers(topic: str) -> list[Subscribe]:
     return list(subs) if subs else []
 
 
+def _user_type(raw: str) -> Literal["group", "direct", "channel", "sub_channel"]:
+    match raw:
+        case "group" | "direct" | "channel" | "sub_channel":
+            return raw
+    raise ValueError(f"unknown subscription user_type: {raw!r}")
+
+
 def event_from_sub(sub: Subscribe) -> Event:
     """按订阅入库时的会话字段重建 Event，用于需要 Event 的工具函数。"""
     return Event(
         bot_id=sub.bot_id,
         user_id=sub.user_id,
         bot_self_id=sub.bot_self_id,
-        user_type=sub.user_type,  # type: ignore[arg-type]
+        user_type=_user_type(sub.user_type),
         group_id=sub.group_id,
         WS_BOT_ID=sub.WS_BOT_ID,
         real_bot_id=sub.bot_id,

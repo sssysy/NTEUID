@@ -85,8 +85,8 @@ def _fade_left(img: Image.Image, frac: float = 0.45) -> Image.Image:
     edge = max(1, int(w * frac))
     for x in range(w):
         grad.putpixel((x, 0), min(255, round(255 * x / edge)))
-    out.putalpha(ImageChops.multiply(out.split()[3], grad.resize((w, h))))
-    return out
+    r, g, b, a = out.split()
+    return Image.merge("RGBA", (r, g, b, ImageChops.multiply(a, grad.resize((w, h)))))
 
 
 async def _draw_row(

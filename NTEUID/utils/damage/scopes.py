@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import re
 
-# 增益作用域单一真源。
-#
-# 来源限定增伤只加到对应伤害段，不能折入全局增伤区。
-#
-# 引号内的技能类型优先绑定 ability.type，其余名称绑定具体技能。
+# 来源限定的增伤只加到对应伤害段，不能折入全局增伤区；
+# 引号内的技能类型优先绑定 ability.type，其余名称绑定具体技能
 
 # 长关键词优先，避免短词抢先命中。
 KEYWORD_TO_SCOPE: dict[str, str] = {

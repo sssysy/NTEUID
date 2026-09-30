@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os.path
 from typing import Any
+from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 from pydantic import Field, BaseModel, ConfigDict, ValidationError, field_validator
@@ -49,7 +49,7 @@ class GachaRecordItem(_XiaoheiheModel):
 
     @property
     def item_id(self) -> str:
-        stem = os.path.splitext(urlparse(self.img).path.rsplit("/", 1)[-1])[0]
+        stem = PurePosixPath(urlparse(self.img).path.rsplit("/", 1)[-1]).stem
         return stem or self.name
 
 

@@ -19,7 +19,7 @@ TEXT_PATH = Path(__file__).parent / "texture2d"
 
 
 def get_help_data() -> dict[str, PluginHelp]:
-    with open(HELP_DATA, "r", encoding="utf-8") as file:
+    with open(HELP_DATA, encoding="utf-8") as file:
         return json.load(file)
 
 

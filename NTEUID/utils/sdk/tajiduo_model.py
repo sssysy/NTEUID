@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum
+from enum import IntEnum, StrEnum
 from typing import Any
 from dataclasses import dataclass
 
@@ -18,7 +18,7 @@ class TajiduoError(SdkError):
         return message if isinstance(message, str) and message else None
 
 
-class CharQuality(str, Enum):
+class CharQuality(StrEnum):
     S = "ITEM_QUALITY_ORANGE"
     A = "ITEM_QUALITY_PURPLE"
     B = "ITEM_QUALITY_BLUE"
@@ -44,7 +44,7 @@ class CharQuality(str, Enum):
         }[self]
 
 
-class CharElement(str, Enum):
+class CharElement(StrEnum):
     PSYCHE = "CHARACTER_ELEMENT_TYPE_PSYCHE"
     COSMOS = "CHARACTER_ELEMENT_TYPE_COSMOS"
     NATURE = "CHARACTER_ELEMENT_TYPE_NATURE"
@@ -75,7 +75,7 @@ class CharElement(str, Enum):
         }[self]
 
 
-class CharGroup(str, Enum):
+class CharGroup(StrEnum):
     ONE = "CHARACTER_GROUP_TYPE_ONE"
     TWO = "CHARACTER_GROUP_TYPE_TWO"
     THREE = "CHARACTER_GROUP_TYPE_THREE"

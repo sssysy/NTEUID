@@ -6,7 +6,7 @@ from gsuid_core.sv import SV
 from gsuid_core.aps import scheduler
 from gsuid_core.bot import Bot
 from gsuid_core.logger import logger
-from gsuid_core.models import Event
+from gsuid_core.models import Event, Message
 
 from .notice import get_notice, get_all_notice_list
 from ..utils.msgs import NoticeMsg, send_nte_notify
@@ -98,9 +98,10 @@ async def check_nte_notice_state():
             logger.warning(f"[异环公告] 拉取详情失败 postId={post.post_id}: {error}")
             continue
 
+        payload = img if isinstance(img, bytes) else [Message(type="image", data=part) for part in img]
         for sub in subs:
             try:
-                await sub.send(img)  # type: ignore
+                await sub.send(payload)
             except Exception as error:
                 logger.warning(f"[异环公告] 推送失败 postId={post.post_id} group={sub.group_id}: {error!r}")
             await asyncio.sleep(random.uniform(1, 3))

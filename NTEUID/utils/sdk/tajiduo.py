@@ -90,7 +90,7 @@ class TajiduoClient(_TajiduoBase):
         self.timeout = timeout
 
     @classmethod
-    def from_user(cls, user: Any) -> "TajiduoClient":
+    def from_user(cls, user: Any) -> TajiduoClient:
         """按本地账号重建 client；access_token 是否复用或刷新交给 session 层。"""
         device_id = user.dev_code or make_device_id()
         return cls(

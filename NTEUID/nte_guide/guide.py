@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from typing import Any
 from pathlib import Path
 
@@ -25,11 +26,7 @@ async def get_guide(bot: Bot, ev: Event, char_name: str) -> None:
     logger.debug(f"[NTE攻略] 开始获取 {real_name} 图鉴")
     config = NTEConfig.get_config("NTEGuide").data
     guide_paths = (GUIDE_PATH, GUIDE_CUSTOM_PATH)
-    authors = (
-        list(dict.fromkeys(p.name for path in guide_paths for p in path.iterdir() if p.is_dir()))
-        if "all" in config
-        else config
-    )
+    authors = await asyncio.to_thread(_all_authors, guide_paths) if "all" in config else config
 
     pattern = re.compile(re.escape(real_name), re.IGNORECASE)
     imgs: list[Any] = []
@@ -45,20 +42,28 @@ async def get_guide(bot: Bot, ev: Event, char_name: str) -> None:
     await bot.send_option(parts, guide_buttons(real_name))
 
 
-async def _collect(guide_dirs: tuple[Path, ...], pattern: re.Pattern, author: str) -> list[Any]:
+def _all_authors(guide_paths: tuple[Path, ...]) -> list[str]:
+    return list(dict.fromkeys(p.name for path in guide_paths for p in path.iterdir() if p.is_dir()))
+
+
+def _match_files(guide_dirs: tuple[Path, ...], pattern: re.Pattern[str]) -> list[Path] | None:
     existing_dirs = [guide_dir for guide_dir in guide_dirs if guide_dir.is_dir()]
     if not existing_dirs:
+        return None
+    return [file for guide_dir in existing_dirs for file in guide_dir.iterdir() if pattern.search(file.name)]
+
+
+async def _collect(guide_dirs: tuple[Path, ...], pattern: re.Pattern[str], author: str) -> list[Any]:
+    files = await asyncio.to_thread(_match_files, guide_dirs, pattern)
+    if files is None:
         logger.warning(f"[NTE攻略] 攻略目录不存在：{guide_dirs}")
         return []
     imgs: list[Any] = []
-    for guide_dir in existing_dirs:
-        for file in guide_dir.iterdir():
-            if not pattern.search(file.name):
-                continue
-            try:
-                imgs.append(MessageSegment.image(await convert_img(file)))
-            except Exception as exc:
-                logger.warning(f"[NTE攻略] 图片读取失败 {file}: {exc}")
+    for file in files:
+        try:
+            imgs.append(MessageSegment.image(await convert_img(file)))
+        except Exception as exc:
+            logger.warning(f"[NTE攻略] 图片读取失败 {file}: {exc}")
     if imgs:
         imgs.insert(0, f"攻略作者：{author}")
     return imgs
