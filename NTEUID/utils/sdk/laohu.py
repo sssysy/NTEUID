@@ -50,7 +50,7 @@ class LaohuAccount:
     raw: dict = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_payload(cls, data: dict) -> "LaohuAccount":
+    def from_payload(cls, data: dict) -> LaohuAccount:
         raw_user_id = data.get("userId")
         raw_token = data.get("token")
         if raw_user_id is None or raw_token is None:

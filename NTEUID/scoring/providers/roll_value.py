@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import math
-from typing import Any, cast
 from pathlib import Path
 from functools import lru_cache
 from dataclasses import dataclass
 from collections.abc import Sequence
+
+from pydantic import Field, BaseModel, TypeAdapter
 
 from ..contract import GradeSpec, BaseScorer, ScorerMeta
 from ..registry import register_scorer
@@ -108,26 +108,48 @@ class CharacterScore:
         return prop.id.lower() in self.plan.recommend_attrs
 
 
+class _AttributeRaw(BaseModel):
+    name: str = ""
+    score: float = 0.0
+
+
+class _GradeTierRaw(BaseModel):
+    grade: str
+    min_ratio: float
+
+
+class _GradesRaw(BaseModel):
+    tiers: list[_GradeTierRaw] = Field(default_factory=list)
+
+
+class _PlanMaxRaw(BaseModel):
+    score: int
+    core: float
+    pie: dict[str, float] = Field(default_factory=dict)
+
+
+class _ScorePlanRaw(BaseModel):
+    refer_score: int
+    max: _PlanMaxRaw
+    core_main_attr_list: list[str] = Field(default_factory=list)
+    recommend_attr_list: list[str] = Field(default_factory=list)
+
+
+_ATTRIBUTES_ADAPTER = TypeAdapter(dict[str, _AttributeRaw])
+
+
 @lru_cache(maxsize=1)
 def load_attributes() -> AttributeTable:
-    with (SCORING_PATH / "attributes.json").open("r", encoding="utf-8") as file:
-        raw = cast(dict[str, dict[str, Any]], json.load(file))
+    raw = _ATTRIBUTES_ADAPTER.validate_json((SCORING_PATH / "attributes.json").read_bytes())
     return AttributeTable(
-        entries={
-            attr_id.lower(): AttributeInfo(name=str(info.get("name", "")), score=float(info.get("score", 0.0)))
-            for attr_id, info in raw.items()
-        }
+        entries={attr_id.lower(): AttributeInfo(name=info.name, score=info.score) for attr_id, info in raw.items()}
     )
 
 
 @lru_cache(maxsize=1)
 def load_grades() -> GradeTable:
-    with (SCORING_PATH / "grades.json").open("r", encoding="utf-8") as file:
-        raw = cast(dict[str, Any], json.load(file))
-    tiers = tuple(
-        GradeTier(grade=str(item["grade"]), min_ratio=float(item["min_ratio"]))
-        for item in cast(list[dict[str, Any]], raw.get("tiers", []))
-    )
+    raw = _GradesRaw.model_validate_json((SCORING_PATH / "grades.json").read_bytes())
+    tiers = tuple(GradeTier(grade=item.grade, min_ratio=item.min_ratio) for item in raw.tiers)
     if not tiers:
         raise ValueError("grades.json has no tiers")
     return GradeTable(tiers=tuple(sorted(tiers, key=lambda item: item.min_ratio, reverse=True)))
@@ -138,27 +160,21 @@ def load_score_plan(char_id: str) -> ScorePlan | None:
     path = SCORING_PATH / "chars" / f"{char_id}.json"
     if not path.exists():
         return None
-    with path.open("r", encoding="utf-8") as file:
-        raw = cast(dict[str, Any], json.load(file))
-
-    refer_score = int(raw["refer_score"])
-    max_data = cast(dict[str, Any], raw["max"])
-    max_score = int(max_data["score"])
-    if refer_score <= 0 or max_score <= 0:
+    raw = _ScorePlanRaw.model_validate_json(path.read_bytes())
+    if raw.refer_score <= 0 or raw.max.score <= 0:
         raise ValueError(f"invalid scoring plan: char_id={char_id}")
 
-    max_pies = cast(dict[str, Any], max_data.get("pie") or {})
-    core_main_attrs = frozenset(str(attr).lower() for attr in raw.get("core_main_attr_list", []))
-    recommend_attrs = frozenset(str(attr).lower() for attr in raw.get("recommend_attr_list", []))
+    core_main_attrs = frozenset(attr.lower() for attr in raw.core_main_attr_list)
+    recommend_attrs = frozenset(attr.lower() for attr in raw.recommend_attr_list)
     attrs = load_attributes()
     return ScorePlan(
-        refer_score=refer_score,
+        refer_score=raw.refer_score,
         core_main_attrs=core_main_attrs,
         recommend_attrs=recommend_attrs,
         effective_attr_names=attrs.names_for(core_main_attrs | recommend_attrs),
-        max_core=float(max_data["core"]),
-        max_pies={str(grid): float(value) for grid, value in max_pies.items()},
-        max_score=max_score,
+        max_core=raw.max.core,
+        max_pies=raw.max.pie,
+        max_score=raw.max.score,
     )
 
 

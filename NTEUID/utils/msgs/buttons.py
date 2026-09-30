@@ -65,18 +65,6 @@ def role_home_buttons() -> ButtonRows:
     return [[cmd_btn("刷新面板", "刷新面板"), cmd_btn("练度", "练度")]]
 
 
-def char_detail_buttons(char_name: str) -> ButtonRows:
-    """角色详情卡入口：bot排行/攻略/配队/图鉴。char_name 传标准名，命令才能命中。"""
-    return [
-        [cmd_btn(f"{char_name}bot排行", f"{char_name}bot排行")],
-        [
-            cmd_btn("攻略", f"{char_name}攻略"),
-            cmd_btn("配队", f"{char_name}配队"),
-            cmd_btn("图鉴", f"{char_name}图鉴"),
-        ],
-    ]
-
-
 def refresh_changed_buttons(char_names: list[str]) -> ButtonRows:
     """变动角色（调用方已按品级/等级排序）做成详情入口，最多 4 个、每行 2 个；无变动则给『练度』入口。"""
     if not char_names:

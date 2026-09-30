@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 from datetime import datetime, timedelta
 
 from sqlmodel import Field, col, select
@@ -474,7 +474,8 @@ class NTEUser(User, table=True):
             .where(col(cls.user_id) == user_id, col(cls.bot_id) == bot_id, col(cls.center_uid) == center_uid)
             .values(updated_at=datetime.now() if when is None else when)
         )
-        return cast(CursorResult, await session.execute(stmt)).rowcount
+        result = await session.execute(stmt)
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -486,17 +487,14 @@ class NTEUser(User, table=True):
         center_uid: str,
     ) -> int:
         """删除指定用户下某个 center_uid 的所有角色行（单账号登出）。"""
-        result = cast(
-            CursorResult,
-            await session.execute(
-                delete(cls).where(
-                    col(cls.user_id) == user_id,
-                    col(cls.bot_id) == bot_id,
-                    col(cls.center_uid) == center_uid,
-                ),
+        result = await session.execute(
+            delete(cls).where(
+                col(cls.user_id) == user_id,
+                col(cls.bot_id) == bot_id,
+                col(cls.center_uid) == center_uid,
             ),
         )
-        return result.rowcount
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -506,13 +504,10 @@ class NTEUser(User, table=True):
         user_id: str,
         bot_id: str,
     ) -> int:
-        result = cast(
-            CursorResult,
-            await session.execute(
-                delete(cls).where(col(cls.user_id) == user_id, col(cls.bot_id) == bot_id),
-            ),
+        result = await session.execute(
+            delete(cls).where(col(cls.user_id) == user_id, col(cls.bot_id) == bot_id),
         )
-        return result.rowcount
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -559,7 +554,8 @@ class NTEUser(User, table=True):
             )
             .values(tap_id=tap_id, updated_at=datetime.now())
         )
-        return cast(CursorResult, await session.execute(stmt)).rowcount
+        result = await session.execute(stmt)
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -578,7 +574,8 @@ class NTEUser(User, table=True):
             )
             .values(xhh_pkey=pkey, updated_at=datetime.now())
         )
-        return cast(CursorResult, await session.execute(stmt)).rowcount
+        result = await session.execute(stmt)
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -1049,11 +1046,8 @@ class NTESignRecord(BaseIDModel, table=True):
         session: AsyncSession,
         date: str,
     ) -> int:
-        result = cast(
-            CursorResult,
-            await session.execute(delete(cls).where(col(cls.date) < date)),
-        )
-        return result.rowcount
+        result = await session.execute(delete(cls).where(col(cls.date) < date))
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
 
 class NTEGroupMember(BaseIDModel, table=True):
@@ -1128,11 +1122,8 @@ class NTEGroupMember(BaseIDModel, table=True):
         """登出：把这些 uid 从所有群榜上清掉。"""
         if not uids:
             return 0
-        result = cast(
-            CursorResult,
-            await session.execute(delete(cls).where(col(cls.bot_id) == bot_id, col(cls.uid).in_(uids))),
-        )
-        return result.rowcount
+        result = await session.execute(delete(cls).where(col(cls.bot_id) == bot_id, col(cls.uid).in_(uids)))
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
 
 class NTECharData(BaseIDModel, table=True):
@@ -1367,54 +1358,54 @@ class NTECharData(BaseIDModel, table=True):
         """登出时清掉这些账号的个人数据。"""
         if not uids:
             return 0
-        result = cast(CursorResult, await session.execute(delete(cls).where(col(cls.uid).in_(uids))))
-        return result.rowcount
+        result = await session.execute(delete(cls).where(col(cls.uid).in_(uids)))
+        return result.rowcount if isinstance(result, CursorResult) else 0
 
 
 @site.register_admin
 class NTEUserAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环用户管理", icon="fa fa-users")  # type: ignore
+    page_schema = PageSchema(label="异环用户管理", icon="fa fa-users")
     model = NTEUser
 
 
 @site.register_admin
 class NTEWanmeiUserAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环完美账号", icon="fa fa-headset")  # type: ignore
+    page_schema = PageSchema(label="异环完美账号", icon="fa fa-headset")
     model = NTEWanmeiUser
 
 
 @site.register_admin
 class NTEWanmeiScratchRecordAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环刮刮乐流水", icon="fa fa-chart-line")  # type: ignore
+    page_schema = PageSchema(label="异环刮刮乐流水", icon="fa fa-chart-line")
     model = NTEWanmeiScratchRecord
 
 
 @site.register_admin
 class NTEWanmeiGroupMemberAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环刮刮乐群榜", icon="fa fa-users-line")  # type: ignore
+    page_schema = PageSchema(label="异环刮刮乐群榜", icon="fa fa-users-line")
     model = NTEWanmeiGroupMember
 
 
 @site.register_admin
 class NTESignRecordAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环签到记录", icon="fa fa-calendar-check")  # type: ignore
+    page_schema = PageSchema(label="异环签到记录", icon="fa fa-calendar-check")
     model = NTESignRecord
 
 
 @site.register_admin
 class NTEGroupMemberAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环群成员", icon="fa fa-user-friends")  # type: ignore
+    page_schema = PageSchema(label="异环群成员", icon="fa fa-user-friends")
     model = NTEGroupMember
 
 
 @site.register_admin
 class NTECharDataAdmin(GsAdminModel):
     pk_name = "id"
-    page_schema = PageSchema(label="异环个人数据", icon="fa fa-ranking-star")  # type: ignore
+    page_schema = PageSchema(label="异环个人数据", icon="fa fa-ranking-star")
     model = NTECharData

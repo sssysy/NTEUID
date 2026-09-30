@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import re
-import html
 import random
+import asyncio
 import hashlib
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -54,11 +53,6 @@ DEFAULT_ELLIPSIS = "..."
 # 官方 webview design-width=390，渲染宽 1080；卡片模块共用的 vw 系数
 VW_SCALE = 1080 / 390
 
-_RICH_TAG_RE = re.compile(r"<[^>]+>")
-_RICH_BREAK_RE = re.compile(r"(?<![A-Za-z])rn(?![A-Za-z])")
-_SPACE_RE = re.compile(r"[ \t]+")
-_BLANK_LINE_RE = re.compile(r"\n{3,}")
-
 
 def vw(n: float) -> int:
     return round(n * VW_SCALE)
@@ -78,25 +72,28 @@ def cache_name(*parts: object, ext: str = "png") -> str:
     return f"{hashlib.sha1(raw.encode('utf-8')).hexdigest()}.{ext}"
 
 
+def _cache_exists(target: Path) -> bool:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target.exists()
+
+
+def _load_cached_pic(target: Path, size: Size | None) -> Image.Image:
+    with Image.open(target) as img:
+        return (img.resize(size) if size else img).convert("RGBA")
+
+
 async def download_pic_from_url(
     path: Path,
     pic_url: str,
     size: Size | None = None,
     name: str | None = None,
 ) -> Image.Image:
-    path.mkdir(parents=True, exist_ok=True)
-
     if not name:
         name = pic_url.split("/")[-1]
-    _path = path / name
-    if not _path.exists():
+    target = path / name
+    if not await asyncio.to_thread(_cache_exists, target):
         await download(pic_url, path, name, tag="[NTE]")
-
-    img = Image.open(_path)
-    if size:
-        img = img.resize(size)
-
-    return img.convert("RGBA")
+    return await asyncio.to_thread(_load_cached_pic, target, size)
 
 
 async def load_qr_code(url: str, size: int = 220) -> Image.Image | None:
@@ -180,17 +177,6 @@ def wrap_text(
     return lines
 
 
-def text_block_height(
-    line_count: int,
-    font: ImageFont.FreeTypeFont,
-    *,
-    line_gap: int = DEFAULT_LINE_GAP,
-) -> int:
-    if line_count <= 0:
-        return 0
-    return line_count * line_height(font) + max(0, line_count - 1) * line_gap
-
-
 def draw_text_block(
     draw: ImageDraw.ImageDraw,
     xy: tuple[int, int],
@@ -257,17 +243,6 @@ def make_head_avatar(
     frame = Image.open(frame_path).convert("RGBA").resize((size, size))
     canvas.paste(frame, (0, 0), frame)
     return canvas
-
-
-def clean_rich_text(text: str) -> str:
-    raw = html.unescape(text)
-    raw = raw.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
-    raw = raw.replace('""', '"')
-    raw = _RICH_BREAK_RE.sub("\n", raw)
-    raw = _RICH_TAG_RE.sub("", raw)
-    raw = "\n".join(_SPACE_RE.sub(" ", line).strip() for line in raw.splitlines())
-    raw = _BLANK_LINE_RE.sub("\n\n", raw)
-    return raw.strip()
 
 
 class SmoothDrawer:

@@ -21,10 +21,10 @@ _AUTH_STATUS_CODES = {str(item) for item in _AUTH_STATUSES}
 
 # 同 center_uid 并发 refresh 的 single-flight 表：首笔真跑、落库，后到的协程 await 同一 future。
 # TTL 内的缓存命中不进这张表；只有真要打网络的才有竞争。
-_refresh_inflight: dict[str, "asyncio.Future[tuple[str, str]]"] = {}
+_refresh_inflight: dict[str, asyncio.Future[tuple[str, str]]] = {}
 
 
-def _consume_future_exception(fut: "asyncio.Future[tuple[str, str]]") -> None:
+def _consume_future_exception(fut: asyncio.Future[tuple[str, str]]) -> None:
     if fut.cancelled():
         return
     fut.exception()
@@ -59,7 +59,7 @@ async def _refresh_singleflight(user: NTEUser, client: TajiduoClient) -> tuple[s
     if inflight is not None:
         return await inflight
 
-    fut: "asyncio.Future[tuple[str, str]]" = asyncio.get_running_loop().create_future()
+    fut: asyncio.Future[tuple[str, str]] = asyncio.get_running_loop().create_future()
     _refresh_inflight[user.center_uid] = fut
     try:
         session = await client.refresh_session()

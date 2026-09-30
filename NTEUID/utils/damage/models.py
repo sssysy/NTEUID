@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from dataclasses import dataclass
 
 
-class ScaleStat(str, Enum):
+class ScaleStat(StrEnum):
     """技能倍率挂靠的基础属性。倍率名后缀「防御力」「生命上限」决定挂靠对象，缺省挂攻击力。"""
 
     ATK = "atk"
@@ -16,7 +16,7 @@ class ScaleStat(str, Enum):
         return {ScaleStat.ATK: "攻击力", ScaleStat.DEF: "防御力", ScaleStat.HP: "生命上限"}[self]
 
 
-class DamageScenario(str, Enum):
+class DamageScenario(StrEnum):
     """静态面板伤害与显式假设全部战斗条件成立的伤害。"""
 
     BASELINE = "baseline"

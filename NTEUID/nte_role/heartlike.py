@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
-from typing import Any, cast
 from functools import lru_cache
 from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from ..utils.resource.RESOURCE_PATH import HEART_PATH
 
@@ -33,25 +33,19 @@ class HeartTable:
         return min(level, self.max_level)
 
 
+class _HeartTableRaw(BaseModel):
+    max_level: int
+    total_exp_to_max: int
+    levels: list[HeartLevel]
+
+
 @lru_cache(maxsize=1)
 def _heart_table() -> HeartTable:
-    with HEART_PATH.open("r", encoding="utf-8") as file:
-        raw = cast(dict[str, Any], json.load(file))
-    levels = tuple(
-        HeartLevel(
-            level=int(item["level"]),
-            cumulative=int(item["cumulative"]),
-            delta=int(item["delta"]),
-        )
-        for item in sorted(
-            cast(list[dict[str, Any]], raw["levels"]),
-            key=lambda item: int(item["level"]),
-        )
-    )
+    raw = _HeartTableRaw.model_validate_json(HEART_PATH.read_bytes())
     return HeartTable(
-        max_level=int(raw["max_level"]),
-        total_exp_to_max=int(raw["total_exp_to_max"]),
-        levels=levels,
+        max_level=raw.max_level,
+        total_exp_to_max=raw.total_exp_to_max,
+        levels=tuple(sorted(raw.levels, key=lambda item: item.level)),
     )
 
 

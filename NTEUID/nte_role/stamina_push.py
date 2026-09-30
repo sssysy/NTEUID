@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import cast
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
@@ -51,6 +50,12 @@ class StaminaRoleState(BaseModel):
 _STAMINA_STATE_ADAPTER = TypeAdapter(dict[str, StaminaRoleState])
 
 
+def _load_state(sub: Subscribe) -> dict[str, StaminaRoleState]:
+    # 体力订阅创建时总会写入 extra_message
+    assert sub.extra_message is not None, f"stamina subscription without state: {sub.id}"
+    return _STAMINA_STATE_ADAPTER.validate_json(sub.extra_message)
+
+
 def _parse_threshold_arg(raw: str) -> int | None:
     text = raw.strip()
     if not text:
@@ -76,7 +81,7 @@ async def run_subscribe_stamina(bot: Bot, ev: Event, threshold_text: str = "") -
         return await send_nte_notify(bot, ev, CommonMsg.not_logged_in(has_history=has_history))
 
     existing = await get_single_subscription(TOPIC_STAMINA_PUSH, ev)
-    state = _STAMINA_STATE_ADAPTER.validate_json(cast(str, existing.extra_message)) if existing else {}
+    state = _load_state(existing) if existing else {}
     key = f"{user.game_id}:{user.uid}"
     subscribed = key in state
     role_state = state[key] if subscribed else StaminaRoleState()
@@ -102,7 +107,7 @@ async def run_unsubscribe_stamina(bot: Bot, ev: Event) -> None:
         has_history = await NTEUser.has_logged_in_history(ev.user_id, ev.bot_id)
         return await send_nte_notify(bot, ev, CommonMsg.not_logged_in(has_history=has_history))
 
-    state = _STAMINA_STATE_ADAPTER.validate_json(cast(str, existing.extra_message))
+    state = _load_state(existing)
     key = f"{user.game_id}:{user.uid}"
     if state.pop(key, None) is None:
         return await send_nte_notify(bot, ev, StaminaMsg.NOT_SUBSCRIBED)
@@ -137,7 +142,7 @@ async def check_stamina_push() -> None:
 
 
 async def _push_one(sub: Subscribe, max_pushes: int, today: str) -> None:
-    state = _STAMINA_STATE_ADAPTER.validate_json(cast(str, sub.extra_message))
+    state = _load_state(sub)
     if not state:
         return
 

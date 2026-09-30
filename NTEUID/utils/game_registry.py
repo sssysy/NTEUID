@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from .constants import GAME_ID_HUANTA, GAME_ID_YIHUAN
 
-# 塔吉多旗下参与本插件签到的游戏——新增游戏只在这里加一条即可。
-#   - 键：`game_id`
-#   - 值：签到开关的 config key；None 表示强制签，不给用户开关
-# 注册顺序 = 优先级。第一条是**主游戏**：
-#   - `NTEUser.get_active` 默认只看主游戏
-#   - 登录时为主游戏自动绑定主角色（塔吉多 bind_role 成就任务）
+# 参与签到的游戏 → 签到开关 config key（None = 强制签）；新增游戏只加一条。
+# 顺序即优先级，第一条是主游戏：get_active 默认只看它，登录时为它自动绑主角色
 GAME_SIGN_SWITCHES: dict[str, str | None] = {
     GAME_ID_YIHUAN: None,
     GAME_ID_HUANTA: "NTESignHuanta",
