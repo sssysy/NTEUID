@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import shutil
-import asyncio
 from pathlib import Path
 from dataclasses import dataclass
 
 from gsuid_core.bot import Bot
 from gsuid_core.pool import to_thread
 from gsuid_core.models import Event
-from gsuid_core.utils.plugins_update.git_async import run_git, git_clone, git_fetch, git_reset_hard, git_is_valid_repo
+from gsuid_core.utils.plugins_update.git_async import (
+    run_git,
+    git_clone,
+    git_reset_hard,
+    git_is_valid_repo,
+    git_get_current_commit,
+)
 
 from ..utils.msgs import ScorerMsg, send_nte_notify
+from ..utils.restart import update_lock, restart_after_update
 from ..scoring.registry import SCORERS_PATH, get_scorer, all_scorers
 from ..nte_config.nte_config import NTEConfig
-
-_update_lock = asyncio.Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +26,7 @@ class ScorerUpdateResult:
     name: str
     success: bool
     message: str
+    changed: bool = False
 
 
 def _pack_path(name: str) -> Path | None:
@@ -34,7 +39,7 @@ def _pack_path(name: str) -> Path | None:
 
 
 async def run_scorer_list(bot: Bot, ev: Event) -> None:
-    current: str = NTEConfig.get_config("NTEScoringProvider").data
+    current: str = NTEConfig.get_config("NTEScoringProvider").data.lower()
     lines = ["已注册的评分算法："]
     for scorer_id, scorer in sorted(all_scorers().items()):
         meta = scorer.meta
@@ -50,6 +55,7 @@ async def run_scorer_list(bot: Bot, ev: Event) -> None:
 
 async def run_scorer_set(bot: Bot, ev: Event, scorer_id: str) -> None:
     """改「评分provider」配置并立刻激活验证；prepare 失败回滚原值，不让坏包挂在配置上。"""
+    scorer_id = scorer_id.lower()
     if not scorer_id:
         return await send_nte_notify(bot, ev, ScorerMsg.SET_USAGE)
     scorers = all_scorers()
@@ -72,7 +78,7 @@ async def run_scorer_add(bot: Bot, ev: Event, url: str) -> None:
     if _pack_path(name) is None:
         return await send_nte_notify(bot, ev, ScorerMsg.INVALID_NAME)
     await send_nte_notify(bot, ev, ScorerMsg.installing(name))
-    async with _update_lock:
+    async with update_lock:
         path = _pack_path(name)
         if path is None:
             message = ScorerMsg.INVALID_NAME
@@ -93,7 +99,7 @@ async def run_scorer_add(bot: Bot, ev: Event, url: str) -> None:
 
 async def update_scorer_packs(name: str = "", *, is_force: bool = False) -> list[ScorerUpdateResult]:
     """更新全部或指定评分包，单包失败不重试。"""
-    async with _update_lock:
+    async with update_lock:
         if name:
             path = _pack_path(name)
             if path is None:
@@ -115,14 +121,20 @@ async def update_scorer_packs(name: str = "", *, is_force: bool = False) -> list
             if not (pack / ".git").is_dir() or not await git_is_valid_repo(pack):
                 results.append(ScorerUpdateResult(pack.name, False, "不是有效的 Git 仓库"))
                 continue
-            success, output = await git_fetch(pack)
+            old_head = await git_get_current_commit(pack)
+            local_changes = ""
+            if is_force:
+                _, local_changes, _ = await run_git(pack, "status", "--porcelain", "--untracked-files=no")
+            code, stdout, stderr = await run_git(pack, "fetch", "--no-tags", "--", "origin", "HEAD")
+            success, output = code == 0, stderr or stdout
             if success:
                 if is_force:
-                    success, output = await git_reset_hard(pack, "@{u}")
+                    success, output = await git_reset_hard(pack, "FETCH_HEAD")
                 else:
-                    code, stdout, stderr = await run_git(pack, "merge", "--ff-only", "--no-autostash", "@{u}")
+                    code, stdout, stderr = await run_git(pack, "merge", "--ff-only", "--no-autostash", "FETCH_HEAD")
                     success, output = code == 0, stderr or stdout
-            results.append(ScorerUpdateResult(pack.name, success, output))
+            changed = success and (bool(local_changes) or old_head != await git_get_current_commit(pack))
+            results.append(ScorerUpdateResult(pack.name, success, output, changed))
         return results
 
 
@@ -136,12 +148,14 @@ async def run_scorer_update(bot: Bot, ev: Event, name: str) -> None:
         message = result.message.rsplit("\n", 1)[-1][-120:]
         lines.append(f"· {result.name}: {'✅' if result.success else '❌'} {message}")
     await send_nte_notify(bot, ev, ScorerMsg.batch_updated(lines))
+    if any(result.changed for result in results):
+        await restart_after_update(bot)
 
 
 async def run_scorer_remove(bot: Bot, ev: Event, name: str) -> None:
     if not name:
         return await send_nte_notify(bot, ev, ScorerMsg.REMOVE_USAGE)
-    async with _update_lock:
+    async with update_lock:
         path = _pack_path(name)
         if path is None:
             message = ScorerMsg.INVALID_NAME

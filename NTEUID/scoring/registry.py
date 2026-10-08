@@ -26,7 +26,8 @@ _loaded = False
 
 
 def register_scorer(scorer: Scorer) -> None:
-    if scorer.scorer_id in _scorers:
+    scorer_id = scorer.scorer_id.lower()
+    if scorer_id in _scorers:
         raise ValueError(f"评分 provider 重复注册: {scorer.scorer_id}")
     try:
         author = scorer.meta.author
@@ -34,7 +35,7 @@ def register_scorer(scorer: Scorer) -> None:
         raise ValueError(f"评分包必须定义 meta = ScorerMeta(author=...): {scorer.scorer_id}") from error
     if not author:
         raise ValueError(f"评分包必须声明作者: {scorer.scorer_id} (ScorerMeta.author)")
-    _scorers[scorer.scorer_id] = scorer
+    _scorers[scorer_id] = scorer
 
 
 def _load_scorers() -> None:
@@ -84,7 +85,7 @@ def all_scorers() -> dict[str, Scorer]:
 
 def _configured_scorer() -> Scorer:
     _load_scorers()
-    scorer_id: str = NTEConfig.get_config("NTEScoringProvider").data
+    scorer_id: str = NTEConfig.get_config("NTEScoringProvider").data.lower()
     if scorer_id not in _scorers:
         raise ValueError(f"评分 provider 未注册: {scorer_id}，可用: {sorted(_scorers)}")
     return _scorers[scorer_id]
@@ -100,8 +101,7 @@ async def get_scorer() -> Scorer:
         if _active is target:
             return target
         await target.prepare()
-        # 重新激活时定向刷新词表并清徽章位图缓存：数据/素材经 git pull 更新后切回即生效。
-        # 其它 scorer 的词表保留，正在渲染的旧卡片仍能取到自己的评级。
+        # 保留其它评分器的词表，供尚未完成的旧卡片渲染使用。
         _specs_cache.pop(target.scorer_id, None)
         _badge_of.cache_clear()
         previous, _active = _active, target

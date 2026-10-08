@@ -6,13 +6,12 @@ from gsuid_core.models import Event
 from gsuid_core.ai_core.register import ai_tools
 
 from ..utils.msgs import TITLE, LoginMsg, send_nte_notify
-from ..utils.database import NTEUser, NTECharData, NTEGroupMember
+from ..utils.database import NTEUser
 from ..nte_guide.guide import get_guide
 from ..utils.constants import GAME_ID_YIHUAN
 from ..nte_help.get_help import get_help
 from ..nte_notice.notice import render_notice_list, get_all_notice_list
 from ..utils.msgs.buttons import sign_buttons
-from ..utils.game_registry import PRIMARY_GAME_ID
 from ..nte_sign.sign_runner import run_user_sign
 from ..nte_code.code_service import run_code
 from ..nte_role.rank_service import run_bot_rank, run_character_rank, run_strongest_board, run_strongest_panel
@@ -423,14 +422,10 @@ async def nte_switch(bot: Bot, ev: Event, target: str = "") -> str:
 async def nte_logout(bot: Bot, ev: Event, all_accounts: bool = False) -> str:
     """删除当前异环登录态并退出账号。用户说"退出登录、登出、解绑、注销"时调用；all_accounts=True 退出全部账号，默认只退出当前账号。"""
     if all_accounts:
-        rows = await NTEUser.list_sign_targets_by_user(ev.user_id, ev.bot_id)
-        uids = [r.uid for r in rows if r.uid and r.game_id == PRIMARY_GAME_ID]
-        deleted = await NTEUser.delete_all(ev.user_id, ev.bot_id)
+        deleted = await NTEUser.delete_accounts(ev.user_id, ev.bot_id)
         if not deleted:
             return "当前没有可退出的异环账号，用户可能尚未登录。"
-        await NTECharData.delete_by_uids(uids)
-        await NTEGroupMember.delete_by_uids(ev.bot_id, uids)
-        logger.info(f"[NTE登出] AI 触发清理全部角色数据 uids={uids}")
+        logger.info(f"[NTE登出] AI 触发清理全部账号和角色数据 user_id={ev.user_id}")
         await send_nte_notify(bot, ev, LoginMsg.LOGOUT_ALL_DONE)
         return "已退出全部异环账号登录。"
 
@@ -441,16 +436,11 @@ async def nte_logout(bot: Bot, ev: Event, all_accounts: bool = False) -> str:
             return "当前没有可退出的异环账号，用户可能尚未登录。"
         user = accounts[0]
 
-    all_rows = await NTEUser.list_sign_targets_by_user(ev.user_id, ev.bot_id)
-    uids = [r.uid for r in all_rows if r.uid and r.center_uid == user.center_uid and r.game_id == PRIMARY_GAME_ID]
-
-    deleted = await NTEUser.delete_by_center_uid(ev.user_id, ev.bot_id, user.center_uid)
+    deleted = await NTEUser.delete_accounts(ev.user_id, ev.bot_id, user.center_uid)
     if not deleted:
         return "退出登录失败，请稍后重试。"
 
-    await NTECharData.delete_by_uids(uids)
-    await NTEGroupMember.delete_by_uids(ev.bot_id, uids)
-    logger.info(f"[NTE登出] AI 触发清理角色数据 uids={uids}")
+    logger.info(f"[NTE登出] AI 触发清理账号和角色数据 center_uid={user.center_uid}")
     await send_nte_notify(bot, ev, LoginMsg.LOGOUT_DONE)
     return "已退出当前异环账号登录。"
 
