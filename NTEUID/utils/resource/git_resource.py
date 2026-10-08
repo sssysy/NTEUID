@@ -14,6 +14,7 @@ from gsuid_core.utils.plugins_update.git_async import (
 
 from .RESOURCE_PATH import STATIC_RESOURCE_PATH
 from .scratch_items import load_scratch_items
+from .suit_properties import load_suit_properties
 
 RESOURCE_URL = "https://cnb.cool/tyql688/NteMeta"
 META_PATH: Path = STATIC_RESOURCE_PATH
@@ -53,6 +54,7 @@ async def update_resources(
 
             await to_thread(reload_all)()
             await load_scratch_items(force=True)
+            await load_suit_properties()
         return result
 
 
@@ -129,6 +131,7 @@ async def _update_resources(is_force: bool, silent: bool) -> ResourceUpdateResul
 
 
 async def init_resources() -> None:
+    await load_suit_properties()
     result = await update_resources()
     if not result["success"]:
         await load_scratch_items(force=True)

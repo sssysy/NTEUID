@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from enum import IntEnum, StrEnum
-from typing import Any
+from typing import Any, Self
 from dataclasses import dataclass
 
-from pydantic import Field, BaseModel, ConfigDict, ValidationError
+from pydantic import Field, BaseModel, ConfigDict, ValidationError, model_validator
 
 from .base import SdkError
+from ..resource.suit_properties import get_suit_main_property
 
 
 class TajiduoError(SdkError):
@@ -242,9 +243,7 @@ class RoleHome(_TajiduoModel):
 
 
 class CharacterProperty(_TajiduoModel):
-    """部分驱动盘 main_properties 项服务端只回 `{id}` 缺 `name`/`value`，
-    pydantic 严格校验会让整张 CharacterDetail 失败；放宽成可选并默认空串，
-    UI 侧已对空名/空值做过滤。"""
+    """接口可能仅提供属性 ID；缺失的名称和值以空串表示。"""
 
     id: str
     name: str = ""
@@ -292,6 +291,20 @@ class CharacterSuitItem(_TajiduoModel):
     lev: int = 0
     main_properties: list[CharacterProperty] = Field(default_factory=list, alias="mainProperties")
     properties: list[CharacterProperty] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def fill_missing_main_properties(self) -> Self:
+        for prop in self.main_properties:
+            if prop.name.strip() and prop.value.strip():
+                continue
+            resolved = get_suit_main_property(self.id, prop.id, self.lev)
+            if resolved is None:
+                continue
+            if not prop.name.strip():
+                prop.name = resolved[0]
+            if not prop.value.strip():
+                prop.value = resolved[1]
+        return self
 
 
 class CharacterSuit(_TajiduoModel):
