@@ -9,8 +9,7 @@ from . import login_router
 from ..utils.msgs import LoginMsg, CommonMsg, send_nte_notify
 from .bind_service import view_bindings, switch_binding, get_laohu_tokens, get_access_tokens, switch_wanmei_account
 from .login_service import request_login, login_by_laohu_token, login_by_access_token, refresh_all_user_tokens
-from ..utils.database import NTEUser, NTECharData, NTEWanmeiUser, NTEGroupMember
-from ..utils.game_registry import PRIMARY_GAME_ID
+from ..utils.database import NTEUser, NTEWanmeiUser
 
 _ = login_router  # 纯副作用 import：FastAPI 路由在模块加载时注册
 
@@ -42,7 +41,7 @@ async def nte_login_cmd(bot: Bot, ev: Event):
 
 
 @sv_nte_login.on_fullmatch(("退出登录", "退出登陆", "登出", "logout"))
-async def nte_logout_cmd(bot: Bot, ev: Event):
+async def nte_logout_cmd(bot: Bot, ev: Event) -> None:
     user = await NTEUser.get_active(ev.user_id, ev.bot_id)
     if user is None:
         accounts = await NTEUser.list_latest_per_account(ev.user_id, ev.bot_id)
@@ -51,33 +50,22 @@ async def nte_logout_cmd(bot: Bot, ev: Event):
             return await send_nte_notify(bot, ev, CommonMsg.not_logged_in(has_history=has_history))
         user = accounts[0]
 
-    # 只清理当前 center_uid 下异环角色的 uid
-    all_rows = await NTEUser.list_sign_targets_by_user(ev.user_id, ev.bot_id)
-    uids = [r.uid for r in all_rows if r.uid and r.center_uid == user.center_uid and r.game_id == PRIMARY_GAME_ID]
-
-    deleted = await NTEUser.delete_by_center_uid(ev.user_id, ev.bot_id, user.center_uid)
+    deleted = await NTEUser.delete_accounts(ev.user_id, ev.bot_id, user.center_uid)
     if not deleted:
         return await send_nte_notify(bot, ev, LoginMsg.NOT_LOGGED_IN)
 
-    await NTECharData.delete_by_uids(uids)
-    await NTEGroupMember.delete_by_uids(ev.bot_id, uids)
-    logger.info(f"[NTE登出] 清理角色数据 uids={uids}")
+    logger.info(f"[NTE登出] 清理账号和角色数据 center_uid={user.center_uid}")
 
     await send_nte_notify(bot, ev, LoginMsg.LOGOUT_DONE)
 
 
 @sv_nte_login.on_fullmatch(("全部登出", "退出全部登录", "退出全部登陆"))
-async def nte_logout_all_cmd(bot: Bot, ev: Event):
-    rows = await NTEUser.list_sign_targets_by_user(ev.user_id, ev.bot_id)
-    uids = [r.uid for r in rows if r.uid and r.game_id == PRIMARY_GAME_ID]
-
-    deleted = await NTEUser.delete_all(ev.user_id, ev.bot_id)
+async def nte_logout_all_cmd(bot: Bot, ev: Event) -> None:
+    deleted = await NTEUser.delete_accounts(ev.user_id, ev.bot_id)
     if not deleted:
         return await send_nte_notify(bot, ev, LoginMsg.NOT_LOGGED_IN)
 
-    await NTECharData.delete_by_uids(uids)
-    await NTEGroupMember.delete_by_uids(ev.bot_id, uids)
-    logger.info(f"[NTE登出] 清理全部角色数据 uids={uids}")
+    logger.info(f"[NTE登出] 清理全部账号和角色数据 user_id={ev.user_id}")
 
     await send_nte_notify(bot, ev, LoginMsg.LOGOUT_ALL_DONE)
 

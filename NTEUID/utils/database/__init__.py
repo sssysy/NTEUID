@@ -479,35 +479,30 @@ class NTEUser(User, table=True):
 
     @classmethod
     @with_session
-    async def delete_by_center_uid(
+    async def delete_accounts(
         cls: type[T_NTEUser],
         session: AsyncSession,
         user_id: str,
         bot_id: str,
-        center_uid: str,
+        center_uid: str | None = None,
     ) -> int:
-        """删除指定用户下某个 center_uid 的所有角色行（单账号登出）。"""
-        result = await session.execute(
-            delete(cls).where(
-                col(cls.user_id) == user_id,
-                col(cls.bot_id) == bot_id,
-                col(cls.center_uid) == center_uid,
-            ),
-        )
-        return result.rowcount if isinstance(result, CursorResult) else 0
+        """删除指定账号或全部账号，并在同一事务中清理异环面板和群榜。"""
+        conditions = [col(cls.user_id) == user_id, col(cls.bot_id) == bot_id]
+        if center_uid is not None:
+            conditions.append(col(cls.center_uid) == center_uid)
 
-    @classmethod
-    @with_session
-    async def delete_all(
-        cls: type[T_NTEUser],
-        session: AsyncSession,
-        user_id: str,
-        bot_id: str,
-    ) -> int:
         result = await session.execute(
-            delete(cls).where(col(cls.user_id) == user_id, col(cls.bot_id) == bot_id),
+            select(col(cls.uid)).where(*conditions, col(cls.game_id) == PRIMARY_GAME_ID, col(cls.uid) != "")
         )
-        return result.rowcount if isinstance(result, CursorResult) else 0
+        uids = list(result.scalars().all())
+        if uids:
+            await session.execute(delete(NTECharData).where(col(NTECharData.uid).in_(uids)))
+            await session.execute(
+                delete(NTEGroupMember).where(col(NTEGroupMember.bot_id) == bot_id, col(NTEGroupMember.uid).in_(uids))
+            )
+
+        deleted = await session.execute(delete(cls).where(*conditions))
+        return deleted.rowcount if isinstance(deleted, CursorResult) else 0
 
     @classmethod
     @with_session
@@ -1111,20 +1106,6 @@ class NTEGroupMember(BaseIDModel, table=True):
         )
         return list(result.scalars().all())
 
-    @classmethod
-    @with_session
-    async def delete_by_uids(
-        cls: type[T_NTEGroupMember],
-        session: AsyncSession,
-        bot_id: str,
-        uids: list[str],
-    ) -> int:
-        """登出：把这些 uid 从所有群榜上清掉。"""
-        if not uids:
-            return 0
-        result = await session.execute(delete(cls).where(col(cls.bot_id) == bot_id, col(cls.uid).in_(uids)))
-        return result.rowcount if isinstance(result, CursorResult) else 0
-
 
 class NTECharData(BaseIDModel, table=True):
     """个人数据表，一行 = (uid, char_id)，取代旧的 playerinfo/{uid}.json 文件。
@@ -1351,15 +1332,6 @@ class NTECharData(BaseIDModel, table=True):
             select(cls.uid, cls.char_id, cls.detail).where(tuple_(col(cls.uid), col(cls.char_id)).in_(pairs))
         )
         return {(uid, char_id): detail for uid, char_id, detail in result.all()}
-
-    @classmethod
-    @with_session
-    async def delete_by_uids(cls: type[T_NTECharData], session: AsyncSession, uids: list[str]) -> int:
-        """登出时清掉这些账号的个人数据。"""
-        if not uids:
-            return 0
-        result = await session.execute(delete(cls).where(col(cls.uid).in_(uids)))
-        return result.rowcount if isinstance(result, CursorResult) else 0
 
 
 @site.register_admin
