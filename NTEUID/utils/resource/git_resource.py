@@ -1,5 +1,4 @@
 import re
-import asyncio
 from typing import TypedDict
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from gsuid_core.utils.plugins_update.git_async import (
     git_get_current_commit,
 )
 
+from ..restart import update_lock, restart_after_update
 from .RESOURCE_PATH import STATIC_RESOURCE_PATH
 from .scratch_items import load_scratch_items
 from .suit_properties import load_suit_properties
@@ -19,13 +19,13 @@ from .suit_properties import load_suit_properties
 RESOURCE_URL = "https://cnb.cool/tyql688/NteMeta"
 META_PATH: Path = STATIC_RESOURCE_PATH
 META_PATH.mkdir(parents=True, exist_ok=True)
-_update_lock = asyncio.Lock()
 
 
 class ResourceUpdateResult(TypedDict):
     success: bool
     message: str
     files_changed: int
+    changed: bool
 
 
 def _is_git_repo() -> bool:
@@ -47,7 +47,7 @@ async def update_resources(
     is_force: bool = False,
     silent: bool = False,
 ) -> ResourceUpdateResult:
-    async with _update_lock:
+    async with update_lock:
         result = await _update_resources(is_force=is_force, silent=silent)
         if result["success"]:
             from ..name_convert import reload_all
@@ -63,6 +63,7 @@ async def _update_resources(is_force: bool, silent: bool) -> ResourceUpdateResul
         "success": False,
         "message": "",
         "files_changed": 0,
+        "changed": False,
     }
 
     branch = await _detect_default_branch()
@@ -73,6 +74,9 @@ async def _update_resources(is_force: bool, silent: bool) -> ResourceUpdateResul
 
     if _is_git_repo():
         old_head = await git_get_current_commit(META_PATH)
+        local_changes = ""
+        if is_force:
+            _, local_changes, _ = await run_git(META_PATH, "status", "--porcelain", "--untracked-files=no")
         rc, stdout, stderr = await run_git(META_PATH, "fetch", "--", "origin", branch)
         success, message = rc == 0, stderr or stdout
         if success:
@@ -91,7 +95,8 @@ async def _update_resources(is_force: bool, silent: bool) -> ResourceUpdateResul
             result["message"] = "无法读取资源版本"
             logger.error(f"[NTEUID] {result['message']}")
             return result
-        if old_head == new_head:
+        result["changed"] = old_head != new_head or bool(local_changes)
+        if not result["changed"]:
             result["success"] = True
             result["message"] = "已是最新"
             if not silent:
@@ -125,6 +130,7 @@ async def _update_resources(is_force: bool, silent: bool) -> ResourceUpdateResul
             return result
 
     result["success"] = True
+    result["changed"] = True
     result["message"] = "首次安装成功"
     logger.success("[NTEUID] 资源包首次安装成功")
     return result
@@ -135,6 +141,8 @@ async def init_resources() -> None:
     result = await update_resources()
     if not result["success"]:
         await load_scratch_items(force=True)
+    elif result["changed"]:
+        await restart_after_update()
 
 
 async def start_resources() -> None:

@@ -26,7 +26,7 @@ NTEUID/scoring/
 ### 外置评分包列表
 
 - [NTE-score-yuye](https://github.com/lingweiliang2510579032/NTE-score-yuye) — `scorer_id`: `yuye`
-- [NTE-score-JiaBaili](https://github.com/jiabaili-qwq/NTE-score-JiaBaili) — `scorer_id`: `JiaBaili`
+- [NTE-score-JiaBaili](https://github.com/jiabaili-qwq/NTE-score-JiaBaili) — `scorer_id`: `jiabaili`
 
 ### 安装与切换
 
@@ -36,7 +36,7 @@ NTEUID/scoring/
 4. 发送 `ntescorer设置 yuye` 切换算法。
 5. 发送 `nte刷新面板`,按新算法重新计算并写入分数。
 
-这里 `NTE-score-yuye` 是安装后的**包目录名**,用于 `ntescorer更新 NTE-score-yuye` 和 `ntescorer删除 NTE-score-yuye`;`yuye` 是包内注册的 `scorer_id`,用于 `ntescorer设置 yuye`。`ntescorer更新` 不带包名会更新全部 Git 安装的评分包。更新会强制对齐远端并丢弃评分包内的本地修改;如果更新包含 Python 代码,完成后还要重启 Bot。
+这里 `NTE-score-yuye` 是安装后的**包目录名**,用于 `ntescorer更新 NTE-score-yuye` 和 `ntescorer删除 NTE-score-yuye`;`yuye` 是包内注册的 `scorer_id`,用于 `ntescorer设置 yuye`。`ntescorer更新` 不带包名会更新全部 Git 安装的评分包。更新会强制对齐远端并丢弃评分包内的本地修改；整批更新结束后，有包更新成功且内容变化时，Core 自动重启。
 
 角色面板、练度统计、评分排名、最强排行、AI 查询全部自动跟随,不用改任何代码。切换算法后旧算法的分数会自动退出榜单(见文末"榜单隔离"),用户重新「刷新面板」即可按新算法入榜。
 
@@ -127,7 +127,7 @@ register_scorer(MyScorer())
 - `equipment`:必须与 `(*suit.core, *suit.pie)` **等长同序**,一件对一件,数量对不上会直接报错,不会静默画错。
 - `score_batch(characters)`:练度统计和刷新面板落库时几十个角色一批调它。`BaseScorer` 默认逐个调 `score_character` 并把单角色的 `ValueError` 降级成 `None`,通常不用管。覆盖成合批请求时,同样等长同序,并保留单角色失败降级为 `None` 的语义——整批抛异常会让整个账号落库失败。
 - `describe_char(char_id)`:给 AI 知识库的文字说明(这个角色怎么算分、什么词条有效)。**插件 import 期就会被调,不能依赖 prepare**;没有该角色的方案返回 `""`。
-- `prepare()` / `close()`:激活时和停用时各调一次,由 registry 驱动,不要自己调。加载数据、建连接放 prepare;prepare 抛异常则维持旧算法不变。清缓存、断连接放 close——通过 `ntescorer更新` 更新数据后,切走再切回来就能重新加载。
+- `prepare()` / `close()`:激活时和停用时各调一次,由 registry 驱动,不要自己调。加载数据、建连接放 prepare;prepare 抛异常则维持旧算法不变。清缓存、断连接放 close。
 
 ### 数据文件放哪、怎么读
 
@@ -182,5 +182,5 @@ def _plan(char_id: str) -> dict | None:
 
 - **加载**:首次用到评分时扫描 `scorers/`,每个子目录按 `<name>/__init__.py` 导入,导入即注册;`_` 和 `.` 开头的目录跳过。某个包加载失败只 warning 跳过,不影响其它包和插件本体;`scorer_id` 重复注册直接报错。
 - **切换**:配置变更后下一次出图生效,流程是 `新.prepare() → 激活 → 旧.close()`,有锁防并发,prepare 失败保持旧算法。
-- **更新生效范围**:数据文件和评级词表/素材在**重新激活时**重载(`ntescorer更新` 后切走再切回即可);但 Python **代码**更新必须重启 Bot,模块不会热重载。通过 `ntescorer增加` 装新包后也需要重启才会被发现。
+- **更新生效范围**:资源或评分包更新成功且内容有变化时，Core 自动重启并重新加载代码和数据。定时任务在资源与全部评分包更新结束后统一重启。通过 `ntescorer增加` 安装新包后需要手动重启 Core。
 - **榜单隔离**:每条评分记录都带产出它的 `scorer_id`,排行 / 最强只在同算法的记录之间比较。不同算法的分数量纲不同,永远不会同榜混排;切包后旧分数自然退出榜单,重新刷新面板即按新算法入榜。另外空串 `grade` 被系统保留表示"不可评分",不要当合法评级用。
